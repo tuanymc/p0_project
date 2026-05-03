@@ -3,7 +3,9 @@
 ## Tables
 - `results/tables/assist2012_dag_disruption.csv`
 - `results/tables/baseline_results.csv`
+- `results/tables/baseline_results.tex`
 - `results/tables/cold_start_metrics.csv`
+- `results/tables/cold_start_metrics.tex`
 - `results/tables/dag_audit_summary.csv`
 - `results/tables/dag_audit_summary.tex`
 - `results/tables/dag_disruption.csv`
@@ -21,6 +23,7 @@
 - `results/figures/fig_ddr_xes3g5m.pdf`
 
 ## Reports
+- `results/reports/assist2012_dag_pruning_log.csv`
 - `results/reports/assist2012_dag_report.md`
 - `results/reports/cold_start_report.md`
 - `results/reports/junyi_dag_pruning_log.csv`

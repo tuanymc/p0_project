@@ -1,0 +1,39 @@
+\begin{table}[t]
+\centering
+\caption{Diagnostic baseline results on the valid+test split (fold~0).
+Reported for protocol verification only; we do not claim SOTA.
+\#evaluations: $4{,}837{,}977$ (Junyi Academy), $816{,}951$
+(ASSISTments~2012), $1{,}922{,}840$ (XES3G5M).}
+\label{tab:baseline-results}
+\setlength{\tabcolsep}{6pt}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabular}{llrrr}
+\toprule
+Dataset & Model & AUC & ACC & NLL \\
+\midrule
+\multirow{6}{*}{Junyi Academy}
+  & BKT      & 0.685 & 0.712 & 0.563 \\
+  & DKT      & 0.728 & 0.706 & 0.559 \\
+  & simpleKT & \textbf{0.735} & \textbf{0.726} & \textbf{0.540} \\
+  & AKT      & 0.730 & 0.717 & 0.557 \\
+  & GKT      & 0.676 & 0.708 & 0.569 \\
+  & GIKT     & 0.725 & 0.719 & 0.547 \\
+\midrule
+\multirow{6}{*}{ASSISTments 2012}
+  & BKT      & 0.607 & 0.694 & 0.602 \\
+  & DKT      & 0.687 & 0.693 & 0.589 \\
+  & simpleKT & \textbf{0.695} & \textbf{0.704} & \textbf{0.574} \\
+  & AKT      & 0.682 & 0.696 & 0.587 \\
+  & GKT      & 0.602 & 0.692 & 0.605 \\
+  & GIKT     & 0.690 & 0.696 & 0.582 \\
+\midrule
+\multirow{6}{*}{XES3G5M}
+  & BKT      & 0.618 & 0.794 & 0.493 \\
+  & DKT      & 0.709 & 0.794 & 0.481 \\
+  & simpleKT & \textbf{0.718} & \textbf{0.796} & \textbf{0.467} \\
+  & AKT      & 0.708 & 0.794 & 0.481 \\
+  & GKT      & 0.608 & 0.794 & 0.497 \\
+  & GIKT     & 0.710 & 0.794 & 0.474 \\
+\bottomrule
+\end{tabular}
+\end{table}

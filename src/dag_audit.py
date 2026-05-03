@@ -43,11 +43,36 @@ def topological_sort(edges: pd.DataFrame) -> list[int]:
     return order
 
 
-def detect_cycles(edges: pd.DataFrame) -> list[list[int]]:
-    """Detect directed cycles in the edge set."""
-    logger.info("Detecting cycles for edges shape=%s", edges.shape)
-    cycles = [list(cycle) for cycle in nx.simple_cycles(_to_graph(edges))]
-    logger.info("Detected %s cycles", len(cycles))
+def _find_one_cycle_edges(edges: pd.DataFrame) -> list[tuple[int, int]]:
+    graph = _to_graph(edges)
+    try:
+        cycle = nx.find_cycle(graph, orientation="original")
+    except nx.NetworkXNoCycle:
+        return []
+    return [(src, dst) for src, dst, _orientation in cycle]
+
+
+def detect_cycles(edges: pd.DataFrame, max_cycles: int = 100) -> list[list[int]]:
+    """Detect representative directed cycles without enumerating all cycles.
+
+    Enumerating all simple cycles can be exponential on dense prerequisite
+    graphs, so this diagnostic returns up to ``max_cycles`` representative
+    cycles found by iterative pruning.
+    """
+    logger.info("Detecting representative cycles for edges shape=%s max_cycles=%s", edges.shape, max_cycles)
+    working = edges.copy().reset_index(drop=True)
+    cycles: list[list[int]] = []
+    while len(cycles) < max_cycles:
+        cycle_edges = _find_one_cycle_edges(working)
+        if not cycle_edges:
+            break
+        cycles.append([src for src, _dst in cycle_edges])
+        src, dst = cycle_edges[0]
+        drop_idx = working[(working["src_kc"] == src) & (working["dst_kc"] == dst)].index
+        if len(drop_idx) == 0:
+            break
+        working = working.drop(index=drop_idx[0]).reset_index(drop=True)
+    logger.info("Detected %s representative cycles", len(cycles))
     return cycles
 
 
@@ -59,11 +84,9 @@ def prune_cycles(edges: pd.DataFrame, confidence_col: str = "weight") -> tuple[p
         pruned[confidence_col] = 1.0
     log: list[dict] = []
     while True:
-        cycles = detect_cycles(pruned)
-        if not cycles:
+        cycle_edges = _find_one_cycle_edges(pruned)
+        if not cycle_edges:
             break
-        cycle = cycles[0]
-        cycle_edges = list(zip(cycle, cycle[1:] + cycle[:1]))
         candidates = pruned[pruned.apply(lambda r: (r["src_kc"], r["dst_kc"]) in cycle_edges, axis=1)].copy()
         idx = candidates[confidence_col].astype(float).idxmin()
         removed = pruned.loc[idx].to_dict()

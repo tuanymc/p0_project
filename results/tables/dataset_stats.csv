@@ -1,4 +1,4 @@
-dataset,split,n_learners,n_interactions
-junyi,train,50930,11379334
-junyi,valid,7275,1619487
-junyi,test,14553,3218490
+dataset,n_learners,n_items,n_kcs,n_interactions,missing_total
+junyi,72758,25785,1326,16217311,0
+assist2012,29018,53086,265,2711602,0
+xes3g5m,18066,7652,865,6413353,0

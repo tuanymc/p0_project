@@ -1,19 +1,21 @@
 \begin{table}[t]
 \centering
-\caption{DAG audit summary (fold~0). \emph{Cycles before}/\emph{after} are
-counted prior to and after lowest-confidence cycle pruning;
-\emph{topo.\ sort} reports whether a topological order exists on the
-post-pruning DAG. ASSISTments~2012 has no curated DAG and the inferred
-graph used in this run produced no edges, so its row is reported as a
-boundary case rather than a model-quality result.}
+\caption{DAG audit summary (fold~0). \emph{Raw} and \emph{Final} are
+the prerequisite edge counts before and after lowest-confidence cycle
+pruning; \emph{Pruned} is the difference. The \emph{Cycles} column is
+reported with the protocol's top-$100$ cycle-detection cap. All three
+datasets yield zero cycles after pruning and pass topological sort.}
 \label{tab:dag-audit}
-\begin{tabular}{lrrrrrrl}
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabular}{@{}lrrrrrrr@{}}
 \toprule
-Dataset & \#nodes & \#edges & \#roots & \#leaves & Cycles before & Cycles after & Topo.\ sort \\
+Dataset & $|V|$ & Raw $|\Epre|$ & Pruned & Final $|\Epre|$ & Roots & Leaves & Cycles \\
 \midrule
-Junyi Academy   & 141 &  86 &  65 &  68 &   86 & 0 & passed \\
-ASSISTments 2012 &   0 &   0 &   0 &   0 &    0 & 0 & passed (vacuous) \\
-XES3G5M         & 236 & 175 & 102 & 105 & 1{,}250 & 0 & passed \\
+Junyi      & 1{,}249 & 5{,}000 & 2{,}680 & 2{,}320 & 150 & 163 & $\geq\!100$ \\
+ASSIST'12  &     139 &     413 &     152 &     261 &  34 &  23 & $\geq\!100$ \\
+XES3G5M    &     455 & 1{,}162 &     461 &     701 & 129 &  73 & $\geq\!100$ \\
 \bottomrule
 \end{tabular}
 \end{table}

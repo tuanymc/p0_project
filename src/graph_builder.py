@@ -7,6 +7,7 @@ provenance for downstream leakage audit reports.
 from __future__ import annotations
 
 import argparse
+import csv
 import itertools
 import logging
 from pathlib import Path
@@ -15,7 +16,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from src.io_utils import append_audit_row, dump_csv, load_interactions, load_yaml
+from src.io_utils import AUDIT_COLUMNS, dump_csv, load_interactions, load_yaml
 from src.split_checker import learner_based_split
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,13 @@ def infer_similarity_edges_from_train(
     return result
 
 
-def infer_prerequisites_from_train(train: pd.DataFrame, q_train: pd.DataFrame) -> pd.DataFrame:
+def infer_prerequisites_from_train(
+    train: pd.DataFrame,
+    q_train: pd.DataFrame,
+    max_edges: int = 5000,
+    top_k_per_node: int = 10,
+    support_quantile: float = 0.90,
+) -> pd.DataFrame:
     """Infer prerequisite edges from train-only temporal KC transitions."""
     logger.info("Inferring prerequisite edges train_shape=%s q_shape=%s", train.shape, q_train.shape)
     _assert_train_only(train)
@@ -89,10 +96,13 @@ def infer_prerequisites_from_train(train: pd.DataFrame, q_train: pd.DataFrame) -
     if not transitions:
         return pd.DataFrame(columns=["src_kc", "dst_kc", "weight", "source"])
     counts = pd.concat(transitions, ignore_index=True).value_counts(["src_kc", "dst_kc"]).rename("support").reset_index()
-    min_support = max(2, int(np.ceil(counts["support"].quantile(0.75)))) if len(counts) > 10 else 1
+    min_support = max(2, int(np.ceil(counts["support"].quantile(support_quantile)))) if len(counts) > 10 else 1
     edges = counts[counts["support"] >= min_support].copy()
     if edges.empty:
         edges = counts.nlargest(min(200, len(counts)), "support").copy()
+    edges = edges.sort_values(["src_kc", "support"], ascending=[True, False])
+    edges = edges.groupby("src_kc", group_keys=False).head(top_k_per_node)
+    edges = edges.nlargest(min(max_edges, len(edges)), "support").copy()
     max_support = max(1, edges["support"].max())
     edges["weight"] = edges["support"] / max_support
     edges["source"] = "train_temporal_precedence"
@@ -121,8 +131,14 @@ def dataset_has_independent_prerequisite_graph(dataset_name: str) -> bool:
 
 
 def _audit_edges(edges: pd.DataFrame, dataset: str, fold: int, edge_type: str) -> None:
+    if edges.empty:
+        return
+    path = Path("logs/leakage_audit_log.csv")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    exists = path.exists() and path.stat().st_size > 0
+    rows = []
     for row in edges.itertuples(index=False):
-        append_audit_row({
+        rows.append({
             "dataset": dataset,
             "fold": fold,
             "edge_type": edge_type,
@@ -131,6 +147,12 @@ def _audit_edges(edges: pd.DataFrame, dataset: str, fold: int, edge_type: str) -
             "source_fold": "train",
             "train_only_flag": True,
         })
+    with path.open("a", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=AUDIT_COLUMNS)
+        if not exists:
+            writer.writeheader()
+        writer.writerows(rows)
+    logger.info("Appended %s audit rows for %s/%s", len(rows), dataset, edge_type)
 
 
 def _merge_stats_row(path: Path, row: dict) -> None:
@@ -156,7 +178,14 @@ def main() -> None:
     train["split"] = "train"
     train["fold"] = 0
     q_train = build_q_matrix_from_train(train)
-    pre = infer_prerequisites_from_train(train, q_train)
+    graph_cfg = cfg.get("graph", {})
+    pre = infer_prerequisites_from_train(
+        train,
+        q_train,
+        max_edges=int(graph_cfg.get("e_pre_max_edges", 5000)),
+        top_k_per_node=int(graph_cfg.get("e_pre_top_k_per_node", 10)),
+        support_quantile=float(graph_cfg.get("e_pre_support_quantile", 0.90)),
+    )
     sim = infer_similarity_edges_from_train(
         train,
         q_train,

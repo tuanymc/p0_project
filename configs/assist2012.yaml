@@ -18,6 +18,9 @@ split:
   n_folds: 3
 graph:
   e_pre_source: inferred
+  e_pre_support_quantile: 0.95
+  e_pre_top_k_per_node: 5
+  e_pre_max_edges: 5000
   e_sim_method: jaccard
   e_sim_threshold: 0.10
   e_sim_top_k_per_node: 20

@@ -1,12 +1,9 @@
 \begin{table}[t]
 \centering
-\caption{DAG Disruption Rate (\DDR{}) sweep on the two datasets that
-ship with a curated prerequisite DAG. Each cell reports
-mean~$\pm$~standard deviation across three random seeds
-$\{42, 17, 1234\}$. Higher \DDR{} indicates greater disruption of the
-original prerequisite edge set per Eq.~(\ref{eq:ddr}). ASSISTments~2012
-is omitted because its inferred DAG produced no edges in the current
-run (Section~\ref{sec:dag-audit}).}
+\caption{DAG Disruption Rate (\DDR{}) sweep across the three benchmarks.
+Each cell reports mean~$\pm$~standard deviation across three random
+seeds $\{42, 17, 1234\}$. Higher \DDR{} indicates greater disruption of
+the original prerequisite edge set per Eq.~(\ref{eq:ddr}).}
 \label{tab:ddr-sweep}
 \setlength{\tabcolsep}{4pt}
 \renewcommand{\arraystretch}{1.05}
@@ -15,16 +12,22 @@ run (Section~\ref{sec:dag-audit}).}
 Dataset & Augmentation & $p=0.05$ & $p=0.10$ & $p=0.20$ & $p=0.30$ \\
 \midrule
 \multirow{4}{*}{Junyi Academy}
-  & node\_drop  & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
-  & edge\_drop  & $0.946 \pm 0.013$ & $0.899 \pm 0.007$ & $0.826 \pm 0.020$ & $0.771 \pm 0.027$ \\
-  & attr\_mask  & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
-  & subgraph    & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
+  & node\_drop  & $0.096 \pm 0.009$ & $0.178 \pm 0.013$ & $0.361 \pm 0.020$ & $0.509 \pm 0.006$ \\
+  & edge\_drop  & $0.049 \pm 0.001$ & $0.097 \pm 0.001$ & $0.200 \pm 0.005$ & $0.299 \pm 0.009$ \\
+  & attr\_mask  & $0.000 \pm 0.000$ & $0.000 \pm 0.000$ & $0.000 \pm 0.000$ & $0.000 \pm 0.000$ \\
+  & subgraph    & $0.096 \pm 0.009$ & $0.178 \pm 0.013$ & $0.361 \pm 0.020$ & $0.509 \pm 0.006$ \\
+\midrule
+\multirow{4}{*}{ASSISTments 2012}
+  & node\_drop  & $0.088 \pm 0.026$ & $0.203 \pm 0.012$ & $0.410 \pm 0.103$ & $0.530 \pm 0.107$ \\
+  & edge\_drop  & $0.055 \pm 0.014$ & $0.100 \pm 0.016$ & $0.211 \pm 0.013$ & $0.308 \pm 0.011$ \\
+  & attr\_mask  & $0.000 \pm 0.000$ & $0.000 \pm 0.000$ & $0.000 \pm 0.000$ & $0.000 \pm 0.000$ \\
+  & subgraph    & $0.088 \pm 0.026$ & $0.203 \pm 0.012$ & $0.410 \pm 0.103$ & $0.530 \pm 0.107$ \\
 \midrule
 \multirow{4}{*}{XES3G5M}
-  & node\_drop  & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
-  & edge\_drop  & $0.947 \pm 0.014$ & $0.906 \pm 0.017$ & $0.825 \pm 0.018$ & $0.778 \pm 0.027$ \\
-  & attr\_mask  & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
-  & subgraph    & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
+  & node\_drop  & $0.113 \pm 0.026$ & $0.195 \pm 0.037$ & $0.385 \pm 0.032$ & $0.531 \pm 0.024$ \\
+  & edge\_drop  & $0.049 \pm 0.005$ & $0.095 \pm 0.005$ & $0.204 \pm 0.010$ & $0.299 \pm 0.002$ \\
+  & attr\_mask  & $0.000 \pm 0.000$ & $0.000 \pm 0.000$ & $0.000 \pm 0.000$ & $0.000 \pm 0.000$ \\
+  & subgraph    & $0.113 \pm 0.026$ & $0.195 \pm 0.037$ & $0.385 \pm 0.032$ & $0.531 \pm 0.024$ \\
 \bottomrule
 \end{tabular}
 \end{table}
