@@ -1,0 +1,87 @@
+# =============================================================================
+#  configs/junyi.yaml -- example P0 config for Junyi Academy
+#
+#  Notes:
+#   * `has_dag: true` because Junyi ships a ground-truth prerequisite DAG.
+#     For datasets without one (e.g. ASSISTments 2012) set `has_dag: false`
+#     and let `graph_builder.infer_prerequisites_from_train` do its thing.
+#   * All randomness flows from `seed`. Seeded PyTorch/NumPy/random.
+#   * Augmentation `seeds` has multiple entries to compute DDR mean/std.
+# =============================================================================
+
+dataset: junyi
+raw_path: data/raw/junyi/
+raw_interactions_file: data/raw/junyi/Log_Problem.csv
+raw_content_file: data/raw/junyi/Info_Content.csv
+raw_user_file: data/raw/junyi/Info_UserData.csv
+processed_path: data/processed/junyi.parquet
+has_dag: true
+
+# --- Schema mapping from raw CSV to canonical column names ---
+schema_mapping:
+  user_id: uuid
+  item_id: upid
+  kc_id: ucid
+  timestamp: timestamp_TW
+  correct: is_correct
+
+# --- Splitting protocol ---
+split:
+  type: learner_temporal     # learner_based + temporal ordering
+  ratios: [0.7, 0.1, 0.2]    # train / valid / test
+  seed: 42
+  n_folds: 3                 # set to 1 for a single split; >1 enables CV
+
+# --- Train-only graph construction ---
+graph:
+  e_pre_source: ground_truth      # `ground_truth` | `inferred`
+  e_pre_dag_path: data/raw/junyi/junyi_dag.csv
+  e_sim_method: jaccard           # `jaccard` | `pmi`
+  e_sim_threshold: 0.10
+  e_sim_top_k_per_node: 20
+
+# --- DAG audit settings ---
+dag_audit:
+  prune_strategy: lowest_confidence_first
+  prune_log: results/reports/dag_pruning_log.csv
+
+# --- Augmentation sweep for DAG Disruption Rate ---
+augmentation:
+  methods: [node_drop, edge_drop, attr_mask, subgraph]
+  ps: [0.05, 0.10, 0.20, 0.30]
+  seeds: [42, 17, 1234]
+
+# --- Cold-start KC stratification ---
+cold_start:
+  bins:
+    - [-1, 19]              # very cold:    < 20 train interactions
+    - [20, 99]              # cold:         20-99
+    - [100, 499]            # warm:         100-499
+    - [500, 10000000]       # hot:          >= 500
+  metrics: [auc, acc, nll]
+
+# --- Baseline diagnostic ---
+baselines:
+  - name: bkt
+    enabled: true
+  - name: dkt
+    enabled: true
+    hyperparams:
+      hidden_dim: 100
+      lr: 0.001
+      epochs: 30
+      batch_size: 64
+  - name: simplekt
+    enabled: true
+  - name: akt
+    enabled: true
+  - name: gkt
+    enabled: true
+  - name: gikt
+    enabled: true
+
+# --- Logging ---
+logging:
+  level: INFO
+  experiment_log: logs/experiment_log.csv
+  leakage_audit_log: logs/leakage_audit_log.csv

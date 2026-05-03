@@ -1,0 +1,30 @@
+\begin{table}[t]
+\centering
+\caption{DAG Disruption Rate (\DDR{}) sweep on the two datasets that
+ship with a curated prerequisite DAG. Each cell reports
+mean~$\pm$~standard deviation across three random seeds
+$\{42, 17, 1234\}$. Higher \DDR{} indicates greater disruption of the
+original prerequisite edge set per Eq.~(\ref{eq:ddr}). ASSISTments~2012
+is omitted because its inferred DAG produced no edges in the current
+run (Section~\ref{sec:dag-audit}).}
+\label{tab:ddr-sweep}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabular}{llcccc}
+\toprule
+Dataset & Augmentation & $p=0.05$ & $p=0.10$ & $p=0.20$ & $p=0.30$ \\
+\midrule
+\multirow{4}{*}{Junyi Academy}
+  & node\_drop  & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
+  & edge\_drop  & $0.946 \pm 0.013$ & $0.899 \pm 0.007$ & $0.826 \pm 0.020$ & $0.771 \pm 0.027$ \\
+  & attr\_mask  & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
+  & subgraph    & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
+\midrule
+\multirow{4}{*}{XES3G5M}
+  & node\_drop  & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
+  & edge\_drop  & $0.947 \pm 0.014$ & $0.906 \pm 0.017$ & $0.825 \pm 0.018$ & $0.778 \pm 0.027$ \\
+  & attr\_mask  & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
+  & subgraph    & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ & $1.000 \pm 0.000$ \\
+\bottomrule
+\end{tabular}
+\end{table}

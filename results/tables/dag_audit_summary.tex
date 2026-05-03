@@ -1,0 +1,19 @@
+\begin{table}[t]
+\centering
+\caption{DAG audit summary (fold~0). \emph{Cycles before}/\emph{after} are
+counted prior to and after lowest-confidence cycle pruning;
+\emph{topo.\ sort} reports whether a topological order exists on the
+post-pruning DAG. ASSISTments~2012 has no curated DAG and the inferred
+graph used in this run produced no edges, so its row is reported as a
+boundary case rather than a model-quality result.}
+\label{tab:dag-audit}
+\begin{tabular}{lrrrrrrl}
+\toprule
+Dataset & \#nodes & \#edges & \#roots & \#leaves & Cycles before & Cycles after & Topo.\ sort \\
+\midrule
+Junyi Academy   & 141 &  86 &  65 &  68 &   86 & 0 & passed \\
+ASSISTments 2012 &   0 &   0 &   0 &   0 &    0 & 0 & passed (vacuous) \\
+XES3G5M         & 236 & 175 & 102 & 105 & 1{,}250 & 0 & passed \\
+\bottomrule
+\end{tabular}
+\end{table}

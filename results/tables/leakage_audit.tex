@@ -1,0 +1,24 @@
+\begin{table}[t]
+\centering
+\caption{Leakage audit summary (fold~0). Every edge written to the
+provenance log is tagged \texttt{train\_only\_flag = True} by
+construction; any violation halts the pipeline. The \emph{\#sim. edges}
+column reports the size of $\Esim$ produced by Jaccard co-occurrence on
+the train fold. The Junyi Academy and ASSISTments~2012 cells for
+$\Esim$ are reported as \emph{not generated}: in the current run, the
+similarity-edge stage produced output only for XES3G5M; the other two
+datasets are flagged as pending in the artefact's experiment log. The
+$\Epre$ counts are taken from Table~\ref{tab:dag-audit}.}
+\label{tab:leakage-audit}
+\setlength{\tabcolsep}{6pt}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{lrrll}
+\toprule
+Dataset & \#$\Epre$ edges & \#$\Esim$ edges & Train-only flag & Learner overlap \\
+\midrule
+Junyi Academy    &  86 & not generated & 100\% True (over $\Epre$) & none \\
+ASSISTments 2012 &   0 & not generated & 100\% True (vacuous)      & none \\
+XES3G5M          & 175 & 360           & 100\% True                & none \\
+\bottomrule
+\end{tabular}
+\end{table}

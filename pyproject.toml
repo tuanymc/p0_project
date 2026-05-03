@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "p0-kc-graph-protocol"
+version = "0.1.0"
+description = "Leakage-controlled KC graph protocol artefact"
+requires-python = ">=3.10"
+readme = "README.md"
+
+[tool.setuptools]
+packages = ["src"]
+
+[project.scripts]
+p0-preprocess = "src.preprocess:main"
+p0-split-check = "src.split_checker:main"
+p0-graph-build = "src.graph_builder:main"
+p0-dag-audit = "src.dag_audit:main"
+p0-dag-disrupt = "src.dag_disruption:main"
+p0-cold-start = "src.cold_start_report:main"
+p0-baseline = "src.baseline_runner:main"

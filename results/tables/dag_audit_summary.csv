@@ -1,0 +1,4 @@
+dataset,n_nodes,n_edges,n_roots,n_leaves,n_cycles_before,n_cycles_after,topo_sort_passed
+assist2012,0,0,0,0,0,0,True
+junyi,141,86,65,68,86,0,True
+xes3g5m,236,175,102,105,1250,0,True

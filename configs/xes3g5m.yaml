@@ -1,0 +1,49 @@
+dataset: xes3g5m
+raw_path: data/raw/xes3g5m/
+raw_format: xes_sequence
+raw_sequence_files:
+  - data/raw/xes3g5m/kc_level/train_valid_sequences.csv
+  - data/raw/xes3g5m/kc_level/test.csv
+processed_path: data/processed/xes3g5m.parquet
+has_dag: true
+schema_mapping:
+  user_id: uid
+  item_id: questions
+  kc_id: concepts
+  timestamp: timestamps
+  correct: responses
+split:
+  type: learner_temporal
+  ratios: [0.7, 0.1, 0.2]
+  seed: 42
+  n_folds: 3
+graph:
+  e_pre_source: ground_truth
+  e_pre_dag_path: data/raw/xes3g5m/xes3g5m_dag.csv
+  e_sim_method: jaccard
+  e_sim_threshold: 0.10
+  e_sim_top_k_per_node: 20
+augmentation:
+  methods: [node_drop, edge_drop, attr_mask, subgraph]
+  ps: [0.05, 0.10, 0.20, 0.30]
+  seeds: [42, 17, 1234]
+cold_start:
+  bins: [[-1, 19], [20, 99], [100, 499], [500, 10000000]]
+  metrics: [auc, acc, nll]
+baselines:
+  - name: bkt
+    enabled: true
+  - name: dkt
+    enabled: true
+  - name: simplekt
+    enabled: true
+  - name: akt
+    enabled: true
+  - name: gkt
+    enabled: true
+  - name: gikt
+    enabled: true
+logging:
+  level: INFO
+  experiment_log: logs/experiment_log.csv
+  leakage_audit_log: logs/leakage_audit_log.csv
