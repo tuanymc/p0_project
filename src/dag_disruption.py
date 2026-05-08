@@ -66,13 +66,40 @@ def apply_attribute_mask(edges: pd.DataFrame, p: float, seed: int) -> pd.DataFra
 
 
 def apply_subgraph_sampling(edges: pd.DataFrame, p: float, seed: int) -> pd.DataFrame:
-    """Keep a sampled node-induced subgraph."""
+    """Keep a random-walk-grown node-induced subgraph."""
     logger.info("Applying subgraph edges_shape=%s p=%s seed=%s", edges.shape, p, seed)
     if edges.empty or p <= 0:
         return edges.copy()
     rng = _rng(seed)
     nodes = np.array(sorted(set(edges["src_kc"]) | set(edges["dst_kc"])))
-    keep_nodes = set(nodes[rng.random(len(nodes)) >= p])
+    target_size = min(len(nodes), max(1, int(np.ceil((1.0 - p) * len(nodes)))))
+
+    adjacency = {node: set() for node in nodes}
+    for src, dst in edges[["src_kc", "dst_kc"]].itertuples(index=False, name=None):
+        adjacency[src].add(dst)
+        adjacency[dst].add(src)
+
+    start = rng.choice(nodes)
+    keep_nodes = {start}
+    frontier = [start]
+    while len(keep_nodes) < target_size:
+        if not frontier:
+            remaining = np.array([node for node in nodes if node not in keep_nodes])
+            if len(remaining) == 0:
+                break
+            start = rng.choice(remaining)
+            keep_nodes.add(start)
+            frontier.append(start)
+            continue
+        current = rng.choice(np.array(frontier))
+        candidates = np.array(sorted(adjacency[current] - keep_nodes))
+        if len(candidates) == 0:
+            frontier.remove(current)
+            continue
+        nxt = rng.choice(candidates)
+        keep_nodes.add(nxt)
+        frontier.append(nxt)
+
     result = edges[edges["src_kc"].isin(keep_nodes) & edges["dst_kc"].isin(keep_nodes)].reset_index(drop=True)
     logger.info("subgraph result_shape=%s", result.shape)
     return result

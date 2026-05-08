@@ -1,1 +1,2 @@
 date,run_id,config,git_sha,seed,duration_sec,notes
+2026-05-08T15:50:54,subgraph-rw-ddr-refresh,configs/junyi.yaml;configs/assist2012.yaml;configs/xes3g5m.yaml,7a35753,"42,17,1234",,Replaced subgraph augmentation with random-walk induced subgraph sampler; added unit tests; regenerated DDR sweeps and figures for all datasets.
