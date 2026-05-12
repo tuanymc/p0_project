@@ -11,19 +11,20 @@
 
 dataset: junyi
 raw_path: data/raw/junyi/
-raw_interactions_file: data/raw/junyi/Log_Problem.csv
-raw_content_file: data/raw/junyi/Info_Content.csv
-raw_user_file: data/raw/junyi/Info_UserData.csv
+# Chang et al. (EDM 2015) release: exercise-level log (not Khan-style uuid/upid/ucid columns).
+raw_interactions_file: data/raw/junyi/junyi_ProblemLog_original.csv
 processed_path: data/processed/junyi.parquet
 has_dag: true
 
 # --- Schema mapping from raw CSV to canonical column names ---
+# Hash exercise name into item_id and kc_id so inferred transitions align with
+# relationship_annotation_* / junyi_dag.csv (Exercise_A / Exercise_B).
 schema_mapping:
-  user_id: uuid
-  item_id: upid
-  kc_id: ucid
-  timestamp: timestamp_TW
-  correct: is_correct
+  user_id: user_id
+  item_id: exercise
+  kc_id: exercise
+  timestamp: time_done
+  correct: correct
 
 # --- Splitting protocol ---
 split:
@@ -34,11 +35,12 @@ split:
 
 # --- Train-only graph construction ---
 graph:
-  e_pre_source: ground_truth      # `ground_truth` | `inferred`
+  e_pre_source: inferred              # train-only temporal precedence (ground_truth path unused in builder)
   e_pre_dag_path: data/raw/junyi/junyi_dag.csv
   e_pre_support_quantile: 0.95
   e_pre_top_k_per_node: 5
   e_pre_max_edges: 5000
+  e_pre_eval_top_ks: [100, 250, 500, 800]
   e_sim_method: jaccard           # `jaccard` | `pmi`
   e_sim_threshold: 0.10
   e_sim_top_k_per_node: 20

@@ -9,11 +9,83 @@ from typing import Sequence
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, log_loss, roc_auc_score
 
 from src.io_utils import dump_csv
 
 logger = logging.getLogger(__name__)
+
+
+def _binary_nll_mean_chunked(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    *,
+    chunk_size: int = 500_000,
+) -> float:
+    """Mean binary log loss without sklearn's multi-array overhead (large-N safe)."""
+    n = int(len(y_true))
+    if n == 0:
+        return float("nan")
+    eps = 1e-15
+    total = 0.0
+    for start in range(0, n, chunk_size):
+        end = min(start + chunk_size, n)
+        y = y_true[start:end].astype(np.float64, copy=False)
+        p = np.clip(y_prob[start:end].astype(np.float64, copy=False), eps, 1.0 - eps)
+        total += float(np.sum(-(y * np.log(p) + (1.0 - y) * np.log(1.0 - p))))
+    return total / n
+
+
+def _binary_roc_auc_mann_whitney(y_true: np.ndarray, y_score: np.ndarray) -> float:
+    """Binary ROC AUC via Mann–Whitney U / (n_pos * n_neg); tie-aware mid-ranks.
+
+    Avoids sklearn's ``roc_auc_score`` path (``label_binarize`` / ``isin``), which
+    spikes RAM on multi-million-row strata.
+    """
+    y_true = np.asarray(y_true)
+    y_score = np.asarray(y_score, dtype=np.float64, copy=False)
+    pos = y_true != 0
+    n_pos = int(np.count_nonzero(pos))
+    n_neg = int(y_true.size - n_pos)
+    if n_pos == 0 or n_neg == 0:
+        return float("nan")
+
+    order = np.argsort(y_score, kind="mergesort")
+    sorted_scores = y_score[order]
+    pos_sorted = pos[order]
+    del order
+
+    n = sorted_scores.size
+    ranks = np.empty(n, dtype=np.float64)
+    i = 0
+    while i < n:
+        j = i + 1
+        while j < n and sorted_scores[j] == sorted_scores[i]:
+            j += 1
+        avg_rank = (i + j + 1) / 2.0
+        ranks[i:j] = avg_rank
+        i = j
+
+    rank_sum_pos = float(np.sum(ranks[pos_sorted]))
+    return (rank_sum_pos - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg)
+
+
+def _binary_accuracy_mean_chunked(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    *,
+    chunk_size: int = 500_000,
+) -> float:
+    """Fraction correct vs 0.5 threshold without sklearn (large-N safe)."""
+    n = int(len(y_true))
+    if n == 0:
+        return float("nan")
+    correct = 0
+    for start in range(0, n, chunk_size):
+        end = min(start + chunk_size, n)
+        yt = y_true[start:end]
+        pred = y_prob[start:end] >= 0.5
+        correct += int(np.sum(yt == pred))
+    return correct / n
 
 
 def bin_kcs_by_frequency(
@@ -46,16 +118,35 @@ def per_stratum_metrics(
     required = {"kc_id", "y_true", "y_prob"}
     if missing := required - set(predictions.columns):
         raise ValueError(f"Missing prediction columns: {sorted(missing)}")
-    merged = predictions.merge(strata[["kc_id", "stratum"]], on="kc_id", how="inner")
+    # Avoid pd.merge on multi-million rows (large concat / consolidate spikes RAM).
+    lookup = pd.Series(strata["stratum"].to_numpy(), index=strata["kc_id"].to_numpy())
+    stratum_labels = predictions["kc_id"].map(lookup)
+    mask = stratum_labels.notna().to_numpy()
+    if not mask.any():
+        return pd.DataFrame(columns=["stratum", "n"] + [m for m in metrics if m in ("auc", "acc", "nll")])
+    sub = pd.DataFrame({
+        "stratum": stratum_labels.to_numpy()[mask],
+        "y_true": predictions["y_true"].to_numpy(dtype=np.int64)[mask],
+        "y_prob": predictions["y_prob"].to_numpy(dtype=float)[mask],
+    })
     rows = []
-    for stratum, part in merged.groupby("stratum"):
+    for stratum, part in sub.groupby("stratum"):
         row = {"stratum": stratum, "n": len(part)}
+        yt = part["y_true"].to_numpy()
+        yp = part["y_prob"].to_numpy()
         if "auc" in metrics:
-            row["auc"] = roc_auc_score(part["y_true"], part["y_prob"]) if part["y_true"].nunique() > 1 else np.nan
+            row["auc"] = (
+                _binary_roc_auc_mann_whitney(yt, yp)
+                if int(yt.min()) != int(yt.max())
+                else np.nan
+            )
         if "acc" in metrics:
-            row["acc"] = accuracy_score(part["y_true"], part["y_prob"] >= 0.5)
+            row["acc"] = _binary_accuracy_mean_chunked(yt, yp)
         if "nll" in metrics:
-            row["nll"] = log_loss(part["y_true"], part["y_prob"], labels=[0, 1])
+            row["nll"] = _binary_nll_mean_chunked(
+                part["y_true"].to_numpy(),
+                part["y_prob"].to_numpy(),
+            )
         rows.append(row)
     result = pd.DataFrame(rows)
     logger.info("Per-stratum metrics shape=%s", result.shape)

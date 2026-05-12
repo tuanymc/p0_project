@@ -1,0 +1,13 @@
+{
+  "matched": 1131,
+  "missing_src": 0,
+  "missing_dst": 0,
+  "missing_both": 0,
+  "alignment_rate": 1.0,
+  "train_filtered": true,
+  "name_mapping_missing_src": 0,
+  "name_mapping_missing_dst": 0,
+  "split_seed": 42,
+  "prereq_threshold": 0.5,
+  "n_expert_edges_loaded": 1131
+}

@@ -47,6 +47,10 @@ def _encode_stable(series: pd.Series) -> pd.Series:
 def _parse_timestamp(series: pd.Series) -> pd.Series:
     if pd.api.types.is_numeric_dtype(series):
         return pd.to_numeric(series, errors="raise").astype("int64")
+    # CSV chunks sometimes ingest epoch-ish ints as strings (e.g. Junyi time_done in microseconds).
+    numeric_try = pd.to_numeric(series, errors="coerce")
+    if numeric_try.notna().all():
+        return numeric_try.astype("int64")
     parsed = pd.to_datetime(series, errors="coerce", utc=True, format="mixed")
     if parsed.isna().any():
         bad_examples = series[parsed.isna()].head(5).tolist()

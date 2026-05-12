@@ -11,6 +11,7 @@ import networkx as nx
 import pandas as pd
 
 from src.io_utils import dump_csv, load_yaml
+from src.split_checker import fold_seeds
 
 logger = logging.getLogger(__name__)
 
@@ -123,12 +124,15 @@ def audit_dag(edges: pd.DataFrame) -> DAGReport:
     return report
 
 
-def _resolve_dataset_and_edges(config: Path | None, edges: Path | None) -> tuple[str, Path]:
+def _resolve_dataset_folds_and_edges(config: Path | None, edges: Path | None, seed: int) -> tuple[str, list[tuple[int, Path]]]:
     if config is None:
-        return "default", edges or Path("data/processed/junyi/fold_0/e_pre_train_only.csv")
+        return "default", [(0, edges or Path("data/processed/junyi/fold_0/e_pre_train_only.csv"))]
     cfg = load_yaml(config)
     dataset = cfg["dataset"]
-    return dataset, edges or Path("data/processed") / dataset / "fold_0" / "e_pre_train_only.csv"
+    if edges is not None:
+        return dataset, [(0, edges)]
+    folds = [(fold, Path("data/processed") / dataset / f"fold_{fold}" / "e_pre_train_only.csv") for fold, _ in enumerate(fold_seeds(cfg.get("split", {}), seed))]
+    return dataset, folds
 
 
 def main() -> None:
@@ -139,39 +143,51 @@ def main() -> None:
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level.upper()))
-    dataset, edges_path = _resolve_dataset_and_edges(args.config, args.edges)
-    edges = pd.read_csv(edges_path) if edges_path.exists() else pd.DataFrame(columns=["src_kc", "dst_kc", "weight"])
-    report = audit_dag(edges)
+    dataset, fold_edges = _resolve_dataset_folds_and_edges(args.config, args.edges, args.seed)
     out = Path("results/reports") / f"{dataset}_dag_report.md"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(
-        f"# DAG Audit Report: {dataset}\n\n"
-        f"- source_edges: `{edges_path}`\n"
-        f"- nodes: {report.n_nodes}\n"
-        f"- edges: {report.n_edges}\n"
-        f"- cycles_before: {report.n_cycles_before}\n"
-        f"- cycles_after: {report.n_cycles_after}\n"
-        f"- topo_sort_passed: {report.topo_sort_passed}\n",
-        encoding="utf-8",
-    )
-    summary = pd.DataFrame([{
-        "dataset": dataset,
-        "n_nodes": report.n_nodes,
-        "n_edges": report.n_edges,
-        "n_roots": report.n_roots,
-        "n_leaves": report.n_leaves,
-        "n_cycles_before": report.n_cycles_before,
-        "n_cycles_after": report.n_cycles_after,
-        "topo_sort_passed": report.topo_sort_passed,
-    }])
+    lines = [f"# DAG Audit Report: {dataset}", ""]
+    rows = []
+    pruning_logs = []
+    for fold, edges_path in fold_edges:
+        edges = pd.read_csv(edges_path) if edges_path.exists() else pd.DataFrame(columns=["src_kc", "dst_kc", "weight"])
+        report = audit_dag(edges)
+        lines.extend([
+            f"## Fold {fold}",
+            f"- source_edges: `{edges_path}`",
+            f"- nodes: {report.n_nodes}",
+            f"- edges: {report.n_edges}",
+            f"- cycles_before: {report.n_cycles_before}",
+            f"- cycles_after: {report.n_cycles_after}",
+            f"- topo_sort_passed: {report.topo_sort_passed}",
+            "",
+        ])
+        rows.append({
+            "dataset": dataset,
+            "fold": fold,
+            "n_nodes": report.n_nodes,
+            "n_edges": report.n_edges,
+            "n_roots": report.n_roots,
+            "n_leaves": report.n_leaves,
+            "n_cycles_before": report.n_cycles_before,
+            "n_cycles_after": report.n_cycles_after,
+            "topo_sort_passed": report.topo_sort_passed,
+        })
+        for item in report.pruning_log:
+            item = dict(item)
+            item["dataset"] = dataset
+            item["fold"] = fold
+            pruning_logs.append(item)
+    out.write_text("\n".join(lines), encoding="utf-8")
+    summary = pd.DataFrame(rows)
     summary_path = Path("results/tables/dag_audit_summary.csv")
     if summary_path.exists():
         previous = pd.read_csv(summary_path)
         previous = previous[previous["dataset"] != dataset]
         summary = pd.concat([previous, summary], ignore_index=True)
-    dump_csv(summary.sort_values("dataset"), summary_path)
-    if report.pruning_log:
-        dump_csv(pd.DataFrame(report.pruning_log), Path("results/reports") / f"{dataset}_dag_pruning_log.csv")
+    dump_csv(summary.sort_values(["dataset", "fold"]), summary_path)
+    if pruning_logs:
+        dump_csv(pd.DataFrame(pruning_logs), Path("results/reports") / f"{dataset}_dag_pruning_log.csv")
 
 
 if __name__ == "__main__":

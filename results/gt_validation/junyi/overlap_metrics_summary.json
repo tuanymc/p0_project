@@ -1,0 +1,30 @@
+{
+  "K_equal_|expert|": {
+    "top_k": 1131,
+    "n_inferred_truncated": 1131,
+    "n_expert_edges": 1131,
+    "edge_precision": 0.1830238726790451,
+    "edge_recall": 0.1830238726790451,
+    "edge_f1": 0.18302387267904513,
+    "direction_agreement": 0.2608695652173913,
+    "reachability_precision": 0.2665349224973754,
+    "reachability_recall": 0.06476104734038562,
+    "reachability_f1": 0.10420338491996427,
+    "node_jaccard": 0.6324786324786325
+  },
+  "K_5000": {
+    "top_k": 5000,
+    "n_inferred_truncated": 2152,
+    "n_expert_edges": 1131,
+    "edge_precision": 0.14265799256505576,
+    "edge_recall": 0.27144120247568526,
+    "edge_f1": 0.18702406335668598,
+    "direction_agreement": 0.2852664576802508,
+    "reachability_precision": 0.2254477981197427,
+    "reachability_recall": 0.6836671918373471,
+    "reachability_f1": 0.3390797968334295,
+    "node_jaccard": 0.6103448275862069
+  },
+  "n_expert_edges_matched": 1131,
+  "n_inferred_edges_available": 2152
+}

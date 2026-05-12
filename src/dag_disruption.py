@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from src.io_utils import dump_csv, load_yaml
+from src.split_checker import fold_seeds
 
 logger = logging.getLogger(__name__)
 
@@ -146,18 +147,38 @@ def sweep_ddr(
     return result
 
 
-def _resolve_run_config(config: Path | None, edges: Path | None, seed: int) -> tuple[str, Path, Sequence[str], Sequence[float], Sequence[int]]:
+def _bootstrap_mean_ci(values: Sequence[float], seed: int, n_bootstrap: int = 1000) -> tuple[float, float]:
+    arr = np.asarray(values, dtype=float)
+    arr = arr[~np.isnan(arr)]
+    if len(arr) == 0:
+        return np.nan, np.nan
+    if len(arr) == 1:
+        return float(arr[0]), float(arr[0])
+    rng = np.random.default_rng(seed)
+    samples = rng.choice(arr, size=(n_bootstrap, len(arr)), replace=True).mean(axis=1)
+    low, high = np.quantile(samples, [0.025, 0.975])
+    return float(low), float(high)
+
+
+def _resolve_run_config(config: Path | None, edges: Path | None, seed: int) -> tuple[str, list[tuple[int, Path]], Sequence[str], Sequence[float], Sequence[int], int]:
     if config is None:
-        return "default", edges or Path("data/processed/junyi/fold_0/e_pre_train_only.csv"), ("node_drop", "edge_drop", "attr_mask", "subgraph"), (0.05, 0.10, 0.20, 0.30), (seed,)
+        return "default", [(0, edges or Path("data/processed/junyi/fold_0/e_pre_train_only.csv"))], ("node_drop", "edge_drop", "attr_mask", "subgraph"), (0.05, 0.10, 0.20, 0.30), (seed,), 1000
     cfg = load_yaml(config)
     dataset = cfg["dataset"]
     augmentation = cfg.get("augmentation", {})
+    split_cfg = cfg.get("split", {})
+    fold_paths = (
+        [(0, edges)]
+        if edges is not None
+        else [(fold, Path("data/processed") / dataset / f"fold_{fold}" / "e_pre_train_only.csv") for fold, _ in enumerate(fold_seeds(split_cfg, seed))]
+    )
     return (
         dataset,
-        edges or Path("data/processed") / dataset / "fold_0" / "e_pre_train_only.csv",
+        fold_paths,
         tuple(augmentation.get("methods", ["node_drop", "edge_drop", "attr_mask", "subgraph"])),
         tuple(float(p) for p in augmentation.get("ps", [0.05, 0.10, 0.20, 0.30])),
         tuple(int(s) for s in augmentation.get("seeds", [seed])),
+        int(augmentation.get("n_bootstrap", 1000)),
     )
 
 
@@ -169,26 +190,54 @@ def main() -> None:
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level.upper()))
-    dataset, edges_path, augmentations, ps, seeds = _resolve_run_config(args.config, args.edges, args.seed)
-    edges = pd.read_csv(edges_path) if edges_path.exists() else pd.DataFrame(columns=["src_kc", "dst_kc", "weight"])
-    result = sweep_ddr(edges, augmentations=augmentations, ps=ps, seeds=seeds)
+    dataset, fold_paths, augmentations, ps, seeds, n_bootstrap = _resolve_run_config(args.config, args.edges, args.seed)
+    frames = []
+    for fold, edges_path in fold_paths:
+        edges = pd.read_csv(edges_path) if edges_path.exists() else pd.DataFrame(columns=["src_kc", "dst_kc", "weight"])
+        fold_result = sweep_ddr(edges, augmentations=augmentations, ps=ps, seeds=seeds)
+        fold_result.insert(0, "fold", fold)
+        frames.append(fold_result)
+    result = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=["fold", "augmentation", "p", "seed", "ddr"])
     result.insert(0, "dataset", dataset)
+    summary_rows = []
+    for (augmentation, p), part in result.groupby(["augmentation", "p"]):
+        ci_low, ci_high = _bootstrap_mean_ci(part["ddr"], seed=args.seed, n_bootstrap=n_bootstrap)
+        summary_rows.append({
+            "dataset": dataset,
+            "augmentation": augmentation,
+            "p": p,
+            "ddr_mean": float(part["ddr"].mean()),
+            "ddr_std": float(part["ddr"].std(ddof=1)) if len(part) > 1 else 0.0,
+            "ddr_ci_low": ci_low,
+            "ddr_ci_high": ci_high,
+            "n": len(part),
+        })
+    summary = pd.DataFrame(summary_rows)
     dataset_table = Path("results/tables") / f"{dataset}_dag_disruption.csv"
     dump_csv(result, dataset_table)
+    dump_csv(summary, Path("results/tables") / f"{dataset}_dag_disruption_summary.csv")
     combined_table = Path("results/tables/dag_disruption.csv")
     combined = result
     if combined_table.exists():
         previous = pd.read_csv(combined_table)
         previous = previous[previous["dataset"] != dataset]
         combined = pd.concat([previous, result], ignore_index=True)
-    dump_csv(combined.sort_values(["dataset", "augmentation", "p", "seed"]), combined_table)
+    dump_csv(combined.sort_values(["dataset", "fold", "augmentation", "p", "seed"]), combined_table)
+    combined_summary_table = Path("results/tables/dag_disruption_summary.csv")
+    combined_summary = summary
+    if combined_summary_table.exists():
+        previous_summary = pd.read_csv(combined_summary_table)
+        previous_summary = previous_summary[previous_summary["dataset"] != dataset]
+        combined_summary = pd.concat([previous_summary, summary], ignore_index=True)
+    dump_csv(combined_summary.sort_values(["dataset", "augmentation", "p"]), combined_summary_table)
     fig_path = Path("results/figures") / f"fig_ddr_{dataset}.pdf"
     fig_path.parent.mkdir(parents=True, exist_ok=True)
-    if not result.empty:
-        for aug, part in result.groupby("augmentation"):
-            plt.plot(part["p"], part["ddr"], marker="o", label=aug)
+    if not summary.empty:
+        for aug, part in summary.groupby("augmentation"):
+            part = part.sort_values("p")
+            plt.plot(part["p"], part["ddr_mean"], marker="o", label=aug)
         plt.xlabel("p")
-        plt.ylabel("DDR")
+        plt.ylabel("Mean DDR")
         plt.title(f"DDR sweep: {dataset}")
         plt.legend()
     plt.tight_layout()

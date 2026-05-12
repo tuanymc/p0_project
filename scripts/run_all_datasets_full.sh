@@ -1,37 +1,81 @@
 #!/usr/bin/env bash
+# Full P0 pipeline on Linux servers (same stages as run_all_datasets_full.ps1).
+#
+# Usage:
+#   chmod +x scripts/run_all_datasets_full.sh
+#   ./scripts/run_all_datasets_full.sh --server              # ~32GB RAM friendly thread caps
+#   ./scripts/run_all_datasets_full.sh --force-full --server # rebuild all parquet from raw
+#   CUDA_VISIBLE_DEVICES=0 ./scripts/run_all_datasets_full.sh --server
+#
 set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
 
-PYTHON_BIN="${PYTHON:-python}"
-CONFIGS=(
-  "configs/junyi.yaml"
-  "configs/assist2012.yaml"
-  "configs/xes3g5m.yaml"
-)
-PROCESSED=(
-  "data/processed/junyi.parquet"
-  "data/processed/assist2012.parquet"
-  "data/processed/xes3g5m.parquet"
+PYTHON="${PYTHON:-python3}"
+FORCE_FULL=0
+SERVER=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force-full) FORCE_FULL=1 ;;
+    --server) SERVER=1 ;;
+    -h|--help)
+      echo "Usage: $0 [--force-full] [--server]"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+if [[ "$FORCE_FULL" -eq 1 ]]; then
+  export FORCE_PREPROCESS=1
+  echo "[run_all_datasets_full] FORCE_PREPROCESS=1"
+fi
+
+if [[ "$SERVER" -eq 1 ]]; then
+  export OMP_NUM_THREADS="${OMP_NUM_THREADS:-8}"
+  export MKL_NUM_THREADS="${MKL_NUM_THREADS:-8}"
+  export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-8}"
+  export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-8}"
+  export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
+  echo "[run_all_datasets_full] Server profile: OMP=$OMP_NUM_THREADS MKL=$MKL_NUM_THREADS OPENBLAS=$OPENBLAS_NUM_THREADS"
+fi
+
+echo "[run_all_datasets_full] PYTHON=$PYTHON FORCE_PREPROCESS=${FORCE_PREPROCESS:-} CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-}"
+
+run_step() {
+  "$PYTHON" "$@"
+}
+
+DATASETS=(
+  "configs/junyi.yaml:data/processed/junyi.parquet"
+  "configs/assist2012.yaml:data/processed/assist2012.parquet"
+  "configs/xes3g5m.yaml:data/processed/xes3g5m.parquet"
 )
 
-for IDX in "${!CONFIGS[@]}"; do
-  CFG="${CONFIGS[$IDX]}"
-  PROCESSED_PATH="${PROCESSED[$IDX]}"
-  echo "==> Running full P0 pipeline for ${CFG}"
-  if [[ -f "$PROCESSED_PATH" && "${FORCE_PREPROCESS:-0}" != "1" ]]; then
-    echo "    Skipping preprocess; found ${PROCESSED_PATH}"
+for entry in "${DATASETS[@]}"; do
+  CFG="${entry%%:*}"
+  PROC="${entry##*:}"
+  echo "==> Running full P0 pipeline for $CFG"
+  if [[ -f "$PROC" && "${FORCE_PREPROCESS:-}" != "1" ]]; then
+    echo "    Skipping preprocess; found $PROC"
   else
-    "$PYTHON_BIN" -m src.preprocess --config "$CFG"
+    run_step -m src.preprocess --config "$CFG"
   fi
-  "$PYTHON_BIN" -m src.split_checker --config "$CFG"
-  "$PYTHON_BIN" -m src.graph_builder --config "$CFG"
-  "$PYTHON_BIN" -m src.dag_audit --config "$CFG"
-  "$PYTHON_BIN" -m src.dag_disruption --config "$CFG"
-  "$PYTHON_BIN" -m src.baseline_runner --config "$CFG"
-  "$PYTHON_BIN" -m src.cold_start_report --config "$CFG"
+  run_step -m src.split_checker --config "$CFG"
+  run_step -m src.graph_builder --config "$CFG"
+  run_step -m src.dag_audit --config "$CFG"
+  run_step -m src.dag_disruption --config "$CFG"
+  run_step -m src.baseline_runner --config "$CFG"
+  run_step -m src.cold_start_report --config "$CFG"
 done
 
 echo "==> Generating paper artefacts"
-"$PYTHON_BIN" scripts/generate_paper_artifacts.py
-"$PYTHON_BIN" -m src.report_generator --out results/reports/
+run_step scripts/generate_paper_artifacts.py
+run_step -m src.report_generator --out results/reports/
 
 echo "==> Done. Main report: results/reports/p0_diagnostic_report.md"
+echo "    Optional Junyi GT CV: python scripts/run_gt_cross_validation_junyi.py"

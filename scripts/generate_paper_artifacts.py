@@ -87,10 +87,11 @@ def _write_baseline_tex(path: Path) -> None:
     df = pd.read_csv(csv_path)
     if df.empty or not {"dataset", "model", "auc", "acc", "nll"}.issubset(df.columns):
         return
+    has_ci = {"auc_ci_low", "auc_ci_high", "acc_ci_low", "acc_ci_high", "nll_ci_low", "nll_ci_high"}.issubset(df.columns)
     lines = [
         r"\begin{table}[t]",
         r"\centering",
-        r"\caption{Diagnostic baseline results. Baselines are used for protocol comparison only; no SOTA claim is made.}",
+        r"\caption{Diagnostic baseline results. Baselines are used for protocol comparison only; no SOTA claim is made. Values are fold means with 95\% bootstrap confidence intervals when available.}",
         r"\label{tab:baseline-results}",
         r"\begin{tabular}{llrrr}",
         r"\toprule",
@@ -98,7 +99,15 @@ def _write_baseline_tex(path: Path) -> None:
         r"\midrule",
     ]
     for row in df.sort_values(["dataset", "model"]).itertuples(index=False):
-        lines.append(f"{row.dataset} & {row.model} & {_fmt_float(row.auc)} & {_fmt_float(row.acc)} & {_fmt_float(row.nll)} " + r"\\")
+        if has_ci:
+            auc = f"{_fmt_float(row.auc)} [{_fmt_float(row.auc_ci_low)}, {_fmt_float(row.auc_ci_high)}]"
+            acc = f"{_fmt_float(row.acc)} [{_fmt_float(row.acc_ci_low)}, {_fmt_float(row.acc_ci_high)}]"
+            nll = f"{_fmt_float(row.nll)} [{_fmt_float(row.nll_ci_low)}, {_fmt_float(row.nll_ci_high)}]"
+        else:
+            auc = _fmt_float(row.auc)
+            acc = _fmt_float(row.acc)
+            nll = _fmt_float(row.nll)
+        lines.append(f"{row.dataset} & {row.model} & {auc} & {acc} & {nll} " + r"\\")
     lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table}", ""])
     path.write_text("\n".join(lines), encoding="utf-8")
 

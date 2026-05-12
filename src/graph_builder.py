@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from src.io_utils import AUDIT_COLUMNS, dump_csv, load_interactions, load_yaml
-from src.split_checker import learner_based_split
+from src.split_checker import learner_based_folds
 
 logger = logging.getLogger(__name__)
 
@@ -82,10 +82,10 @@ def infer_prerequisites_from_train(
     """Infer prerequisite edges from train-only temporal KC transitions."""
     logger.info("Inferring prerequisite edges train_shape=%s q_shape=%s", train.shape, q_train.shape)
     _assert_train_only(train)
-    ordered = train.sort_values(["user_id", "timestamp"])
     transitions = []
-    for _user_id, part in ordered.groupby("user_id", sort=False):
-        kcs = part["kc_id"].to_numpy()
+    for _user_id, part in train.groupby("user_id", sort=False):
+        ordered_part = part.sort_values("timestamp")
+        kcs = ordered_part["kc_id"].to_numpy()
         if len(kcs) < 2:
             continue
         src = kcs[:-1]
@@ -155,11 +155,11 @@ def _audit_edges(edges: pd.DataFrame, dataset: str, fold: int, edge_type: str) -
     logger.info("Appended %s audit rows for %s/%s", len(rows), dataset, edge_type)
 
 
-def _merge_stats_row(path: Path, row: dict) -> None:
+def _merge_stats_rows(path: Path, rows: list[dict], dataset: str) -> None:
     current = pd.read_csv(path) if path.exists() else pd.DataFrame()
     if not current.empty and "dataset" in current.columns:
-        current = current[current["dataset"] != row["dataset"]]
-    dump_csv(pd.concat([current, pd.DataFrame([row])], ignore_index=True), path)
+        current = current[current["dataset"] != dataset]
+    dump_csv(pd.concat([current, pd.DataFrame(rows)], ignore_index=True), path)
 
 
 def main() -> None:
@@ -174,37 +174,41 @@ def main() -> None:
     dataset = cfg["dataset"]
     df = load_interactions(Path(cfg.get("processed_path", f"data/processed/{dataset}.parquet")))
     ratios = tuple(cfg.get("split", {}).get("ratios", [0.7, 0.1, 0.2]))
-    train = learner_based_split(df, ratios, seed=cfg.get("split", {}).get("seed", args.seed))["train"]
-    train["split"] = "train"
-    train["fold"] = 0
-    q_train = build_q_matrix_from_train(train)
     graph_cfg = cfg.get("graph", {})
-    pre = infer_prerequisites_from_train(
-        train,
-        q_train,
-        max_edges=int(graph_cfg.get("e_pre_max_edges", 5000)),
-        top_k_per_node=int(graph_cfg.get("e_pre_top_k_per_node", 10)),
-        support_quantile=float(graph_cfg.get("e_pre_support_quantile", 0.90)),
-    )
-    sim = infer_similarity_edges_from_train(
-        train,
-        q_train,
-        method=cfg.get("graph", {}).get("e_sim_method", "jaccard"),
-        threshold=float(cfg.get("graph", {}).get("e_sim_threshold", 0.1)),
-    )
-    out_dir = Path("data/processed") / dataset / "fold_0"
-    dump_csv(pre, out_dir / "e_pre_train_only.csv")
-    dump_csv(sim, out_dir / "e_sim_train_only.csv")
-    dump_csv(pre, out_dir / "edges_train_only.csv")
-    _audit_edges(pre, dataset, 0, "E_pre")
-    _audit_edges(sim, dataset, 0, "E_sim")
-    _merge_stats_row(Path("results/tables/graph_stats.csv"), {
-        "dataset": dataset,
-        "fold": 0,
-        "n_prerequisite_edges": len(pre),
-        "n_similarity_edges": len(sim),
-        "n_kcs": train["kc_id"].nunique(),
-    })
+    stats_rows = []
+    for fold, split_seed, splits in learner_based_folds(df, ratios, cfg.get("split", {}), default_seed=args.seed):
+        train = splits["train"].copy()
+        train["split"] = "train"
+        train["fold"] = fold
+        q_train = build_q_matrix_from_train(train)
+        pre = infer_prerequisites_from_train(
+            train,
+            q_train,
+            max_edges=int(graph_cfg.get("e_pre_max_edges", 5000)),
+            top_k_per_node=int(graph_cfg.get("e_pre_top_k_per_node", 10)),
+            support_quantile=float(graph_cfg.get("e_pre_support_quantile", 0.90)),
+        )
+        sim = infer_similarity_edges_from_train(
+            train,
+            q_train,
+            method=graph_cfg.get("e_sim_method", "jaccard"),
+            threshold=float(graph_cfg.get("e_sim_threshold", 0.1)),
+        )
+        out_dir = Path("data/processed") / dataset / f"fold_{fold}"
+        dump_csv(pre, out_dir / "e_pre_train_only.csv")
+        dump_csv(sim, out_dir / "e_sim_train_only.csv")
+        dump_csv(pre, out_dir / "edges_train_only.csv")
+        _audit_edges(pre, dataset, fold, "E_pre")
+        _audit_edges(sim, dataset, fold, "E_sim")
+        stats_rows.append({
+            "dataset": dataset,
+            "fold": fold,
+            "split_seed": split_seed,
+            "n_prerequisite_edges": len(pre),
+            "n_similarity_edges": len(sim),
+            "n_kcs": train["kc_id"].nunique(),
+        })
+    _merge_stats_rows(Path("results/tables/graph_stats.csv"), stats_rows, dataset)
     logger.info("Graph build report written")
 
 

@@ -45,6 +45,37 @@ def learner_based_split(df: pd.DataFrame, ratios: tuple[float, float, float], se
     return splits
 
 
+def fold_seeds(split_cfg: dict | None, default_seed: int = 42) -> list[int]:
+    """Resolve deterministic split seeds for multi-fold diagnostic runs."""
+    split_cfg = split_cfg or {}
+    if "seeds" in split_cfg:
+        seeds = [int(seed) for seed in split_cfg["seeds"]]
+        if not seeds:
+            raise ValueError("split.seeds must not be empty")
+        return seeds
+    n_folds = int(split_cfg.get("n_folds", 1))
+    if n_folds < 1:
+        raise ValueError("split.n_folds must be >= 1")
+    base_seed = int(split_cfg.get("seed", default_seed))
+    return [base_seed + fold for fold in range(n_folds)]
+
+
+def learner_based_folds(
+    df: pd.DataFrame,
+    ratios: tuple[float, float, float],
+    split_cfg: dict | None = None,
+    default_seed: int = 42,
+) -> list[tuple[int, int, dict[str, pd.DataFrame]]]:
+    """Create deterministic learner-based folds as repeated seeded splits."""
+    folds = []
+    for fold, seed in enumerate(fold_seeds(split_cfg, default_seed=default_seed)):
+        splits = learner_based_split(df, ratios, seed=seed)
+        for part in splits.values():
+            part["fold"] = fold
+        folds.append((fold, seed, splits))
+    return folds
+
+
 def assert_no_user_overlap(splits: dict) -> None:
     """Raise if any learner appears in more than one split."""
     logger.info("Checking user overlap for splits=%s", list(splits.keys()))
@@ -90,18 +121,22 @@ def main() -> None:
     cfg = load_yaml(args.config)
     df = load_interactions(Path(cfg.get("processed_path", f"data/processed/{cfg['dataset']}.parquet")))
     ratios = tuple(cfg.get("split", {}).get("ratios", [0.7, 0.1, 0.2]))
-    splits = learner_based_split(df, ratios, seed=cfg.get("split", {}).get("seed", args.seed))
-    assert_no_user_overlap(splits)
-    assert_temporal_ordering(splits)
-    stats = pd.DataFrame([{
-        "dataset": cfg["dataset"],
-        "split": name,
-        "n_learners": part["user_id"].nunique(),
-        "n_interactions": len(part),
-    } for name, part in splits.items()])
+    rows = []
+    for fold, split_seed, splits in learner_based_folds(df, ratios, cfg.get("split", {}), default_seed=args.seed):
+        assert_no_user_overlap(splits)
+        assert_temporal_ordering(splits)
+        rows.extend({
+            "dataset": cfg["dataset"],
+            "fold": fold,
+            "split_seed": split_seed,
+            "split": name,
+            "n_learners": part["user_id"].nunique(),
+            "n_interactions": len(part),
+        } for name, part in splits.items())
+    stats = pd.DataFrame(rows)
     dump_csv(stats, Path("results/tables/dataset_stats.csv"))
-    print("[OK] No learner overlap between train / valid / test.")
-    print("[OK] Temporal order respected for all users.")
+    print("[OK] No learner overlap between train / valid / test for all folds.")
+    print("[OK] Temporal order respected for all folds.")
 
 
 if __name__ == "__main__":

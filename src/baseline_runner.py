@@ -17,7 +17,7 @@ from sklearn.metrics import accuracy_score, log_loss, roc_auc_score
 
 from src.cold_start_report import bin_kcs_by_frequency, per_stratum_metrics
 from src.io_utils import dump_csv, load_interactions, load_yaml
-from src.split_checker import learner_based_split
+from src.split_checker import learner_based_folds
 
 logger = logging.getLogger(__name__)
 MODEL_WEIGHTS = {
@@ -41,11 +41,11 @@ def _rate_map(train: pd.DataFrame, key: str, alpha: float = 5.0) -> tuple[dict, 
     return rates.to_dict(), global_rate
 
 
-def _graph_kc_rates(train: pd.DataFrame, dataset: str, global_rate: float) -> dict:
+def _graph_kc_rates(train: pd.DataFrame, dataset: str, global_rate: float, fold: int = 0) -> dict:
     kc_rates, _ = _rate_map(train, "kc_id")
     paths = [
-        Path("data/processed") / dataset / "fold_0" / "e_pre_train_only.csv",
-        Path("data/processed") / dataset / "fold_0" / "e_sim_train_only.csv",
+        Path("data/processed") / dataset / f"fold_{fold}" / "e_pre_train_only.csv",
+        Path("data/processed") / dataset / f"fold_{fold}" / "e_sim_train_only.csv",
     ]
     graph_rates: dict[int, float] = {}
     for path in paths:
@@ -64,11 +64,11 @@ def _graph_kc_rates(train: pd.DataFrame, dataset: str, global_rate: float) -> di
     return graph_rates or {int(k): float(v) for k, v in kc_rates.items()} or {-1: global_rate}
 
 
-def _predict_with_weights(train: pd.DataFrame, eval_df: pd.DataFrame, dataset: str, weights: dict[str, float]) -> np.ndarray:
+def _predict_with_weights(train: pd.DataFrame, eval_df: pd.DataFrame, dataset: str, weights: dict[str, float], fold: int = 0) -> np.ndarray:
     kc_rates, global_rate = _rate_map(train, "kc_id")
     item_rates, _ = _rate_map(train, "item_id")
     user_rates, _ = _rate_map(train, "user_id")
-    graph_rates = _graph_kc_rates(train, dataset, global_rate)
+    graph_rates = _graph_kc_rates(train, dataset, global_rate, fold=fold)
     kc_counts = train.groupby("kc_id").size()
     max_count = max(1, int(kc_counts.max())) if not kc_counts.empty else 1
 
@@ -105,13 +105,15 @@ def _metrics(y_true: pd.Series, y_prob: np.ndarray) -> dict[str, float]:
     }
 
 
-def _run_named_model(name: str, splits: dict, dataset: str) -> tuple[dict, pd.DataFrame]:
+def _run_named_model(name: str, splits: dict, dataset: str, fold: int = 0, split_seed: int | None = None) -> tuple[dict, pd.DataFrame]:
     train = splits["train"]
     eval_df = pd.concat([splits["valid"], splits["test"]], ignore_index=True)
     weights = MODEL_WEIGHTS[name]
-    y_prob = _predict_with_weights(train, eval_df, dataset, weights)
+    y_prob = _predict_with_weights(train, eval_df, dataset, weights, fold=fold)
     result = {
         "dataset": dataset,
+        "fold": fold,
+        "split_seed": split_seed,
         "model": name,
         "eval_split": "valid+test",
         **_metrics(eval_df["correct"], y_prob),
@@ -120,6 +122,7 @@ def _run_named_model(name: str, splits: dict, dataset: str) -> tuple[dict, pd.Da
         "note": "Diagnostic baseline; no SOTA claim.",
     }
     predictions = eval_df[["user_id", "item_id", "kc_id", "correct"]].rename(columns={"correct": "y_true"}).copy()
+    predictions["fold"] = fold
     predictions["model"] = name
     predictions["y_prob"] = y_prob
     return result, predictions
@@ -179,15 +182,69 @@ def _merge_csv(path: Path, df: pd.DataFrame, dataset: str) -> None:
     dump_csv(df, path)
 
 
-def _cold_start_rows(dataset: str, train: pd.DataFrame, predictions: pd.DataFrame) -> pd.DataFrame:
-    strata = bin_kcs_by_frequency(train)
+def _cold_start_rows(
+    dataset: str,
+    fold: int,
+    split_seed: int | None,
+    train: pd.DataFrame,
+    predictions: pd.DataFrame,
+    strata: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    strata = strata if strata is not None else bin_kcs_by_frequency(train)
     rows = []
     for model, part in predictions.groupby("model"):
         metrics = per_stratum_metrics(part, strata)
         metrics.insert(0, "model", model)
+        metrics.insert(0, "split_seed", split_seed)
+        metrics.insert(0, "fold", fold)
         metrics.insert(0, "dataset", dataset)
         rows.append(metrics)
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
+
+
+def _enabled_models(cfg: dict) -> list[str]:
+    configured = cfg.get("baselines")
+    if not configured:
+        return list(MODEL_WEIGHTS)
+    models = []
+    for item in configured:
+        name = item.get("name")
+        if item.get("enabled", True) and name in MODEL_WEIGHTS:
+            models.append(name)
+    return models
+
+
+def _bootstrap_mean_ci(values: pd.Series, seed: int, n_bootstrap: int = 1000) -> tuple[float, float]:
+    arr = values.dropna().to_numpy(dtype=float)
+    if len(arr) == 0:
+        return np.nan, np.nan
+    if len(arr) == 1:
+        return float(arr[0]), float(arr[0])
+    rng = np.random.default_rng(seed)
+    samples = rng.choice(arr, size=(n_bootstrap, len(arr)), replace=True).mean(axis=1)
+    low, high = np.quantile(samples, [0.025, 0.975])
+    return float(low), float(high)
+
+
+def _summarize_fold_results(fold_results: pd.DataFrame, seed: int, n_bootstrap: int) -> pd.DataFrame:
+    rows = []
+    for (dataset, model), part in fold_results.groupby(["dataset", "model"]):
+        row = {
+            "dataset": dataset,
+            "model": model,
+            "eval_split": "valid+test",
+            "n_folds": int(part["fold"].nunique()),
+            "n_eval": int(part["n_eval"].sum()),
+            "status": "diagnostic",
+            "note": "Diagnostic baseline; mean over folds with bootstrap CI.",
+        }
+        for metric in ["auc", "acc", "nll"]:
+            row[metric] = float(part[metric].mean())
+            ci_low, ci_high = _bootstrap_mean_ci(part[metric], seed=seed, n_bootstrap=n_bootstrap)
+            row[f"{metric}_ci_low"] = ci_low
+            row[f"{metric}_ci_high"] = ci_high
+        rows.append(row)
+    return pd.DataFrame(rows)
 
 
 def main() -> None:
@@ -202,19 +259,26 @@ def main() -> None:
     cfg = load_yaml(args.config) if args.config else {"dataset": "default", "processed_path": "data/processed/junyi.parquet"}
     dataset = cfg["dataset"]
     df = load_interactions(Path(cfg.get("processed_path", f"data/processed/{dataset}.parquet")))
-    splits = learner_based_split(df, tuple(cfg.get("split", {}).get("ratios", [0.7, 0.1, 0.2])), seed=cfg.get("split", {}).get("seed", args.seed))
+    split_cfg = cfg.get("split", {})
+    ratios = tuple(split_cfg.get("ratios", [0.7, 0.1, 0.2]))
+    n_bootstrap = int(cfg.get("evaluation", {}).get("n_bootstrap", cfg.get("baselines_n_bootstrap", 1000)))
+    models = _enabled_models(cfg)
 
     rows = []
     cold_frames = []
     prediction_samples = []
-    for model in ["bkt", "dkt", "simplekt", "akt", "gkt", "gikt"]:
-        result, predictions = _run_named_model(model, splits, dataset=dataset)
-        rows.append(result)
-        cold = _cold_start_rows(dataset, splits["train"], predictions)
-        if not cold.empty:
-            cold_frames.append(cold)
-        prediction_samples.append(predictions.head(5000))
-    results = pd.DataFrame(rows)
+    for fold, split_seed, splits in learner_based_folds(df, ratios, split_cfg, default_seed=args.seed):
+        strata_once = bin_kcs_by_frequency(splits["train"])
+        for model in models:
+            result, predictions = _run_named_model(model, splits, dataset=dataset, fold=fold, split_seed=split_seed)
+            rows.append(result)
+            cold = _cold_start_rows(dataset, fold, split_seed, splits["train"], predictions, strata=strata_once)
+            if not cold.empty:
+                cold_frames.append(cold)
+            prediction_samples.append(predictions.head(5000))
+    fold_results = pd.DataFrame(rows)
+    results = _summarize_fold_results(fold_results, seed=args.seed, n_bootstrap=n_bootstrap)
+    _merge_csv(Path("results/tables/baseline_fold_results.csv"), fold_results, dataset)
     _merge_csv(Path("results/tables/baseline_results.csv"), results, dataset)
     cold_rows = pd.concat(cold_frames, ignore_index=True) if cold_frames else pd.DataFrame()
     _merge_csv(Path("results/tables/cold_start_metrics.csv"), cold_rows, dataset)
