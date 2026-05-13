@@ -22,7 +22,7 @@ Graph Construction and Cold-Start Diagnostic Protocol for Knowledge Tracing*
 2. [Environment setup](#2-environment-setup)
 3. [Data download and preparation](#3-data-download-and-preparation)
 4. [Running the full pipeline (all benchmarks)](#4-running-the-full-pipeline-all-benchmarks)
-5. [Per-stage commands](#5-per-stage-commands)
+5. [Per-stage commands](#5-per-stage-commands) ([graph_builder API](#51-graph_builder-python-api))
 6. [Outputs and where they live](#6-outputs-and-where-they-live)
 7. [Paper artefacts and LaTeX paths](#7-paper-artefacts-and-latex-paths)
 8. [Troubleshooting](#8-troubleshooting)
@@ -199,6 +199,11 @@ bash scripts/make_all_figures.sh
 python scripts/run_gt_cross_validation_junyi.py
 ```
 
+For lightweight **directed / undirected overlap at @K** on your own edge
+`DataFrame`s (with a `support` column on the inferred side), use
+`evaluate_inferred_against_ground_truth` in `src/graph_builder.py` — see
+[§5.1](#51-graph_builder-python-api).
+
 Outputs: `results/gt_validation/junyi/` (`overlap_metrics_at_K.csv`,
 `fig_pr_curve.pdf`, `gt_validation_table.tex`, etc.).
 
@@ -231,6 +236,27 @@ Most modules accept `--seed` (default `42`) and `--log-level` (`INFO` default).
 Fold-specific graph exports live under
 `data/processed/<dataset>/fold_<k>/` (e.g. `e_pre_train_only.csv`,
 `e_sim_train_only.csv`).
+
+### 5.1 `graph_builder` Python API
+
+Besides the CLI (`python -m src.graph_builder`), `src/graph_builder.py` exposes
+train-only helpers for scripts and experiments:
+
+| Function | Role |
+|----------|------|
+| `build_q_matrix_from_train` | Item–KC table from train interactions only (enforces train-only / single-fold discipline). |
+| `infer_prerequisites_from_train` | Directed prerequisite candidates from temporal KC transitions (`support`, `weight`, …). |
+| `infer_similarity_edges_from_train` | KC–KC similarity edges (Jaccard or PMI). Fails if `fold` column mixes multiple fold ids. |
+| `load_ground_truth_dag` / `dataset_has_independent_prerequisite_graph` | Optional expert DAG loading and dataset capability checks (Junyi / XES-style layouts). |
+
+**Ground-truth overlap at @K** — `evaluate_inferred_against_ground_truth(inferred, expert, top_k_list)` compares a directed inferred edge table to an expert edge list (columns `src_kc`, `dst_kc`). Requirements and behaviour:
+
+- **`inferred`** must include a numeric **`support`** column (same role as in prerequisite outputs). For each `K` in `top_k_list`, the top-*K* rows by descending `support` are evaluated.
+- **Directed hit:** same ordered pair as an expert row.
+- **Undirected hit:** the unordered pair matches an expert edge in either direction (so an inferred `(a,b)` can match an expert `(b,a)`).
+- **Returns** a `DataFrame` with one row per `K`: `k`, `directed_hits`, `undirected_hits`, `directed_precision` (= directed / undirected hits in that top-*K* set, or `0.0` if none), and `directed_recall` (= directed hits / number of expert rows).
+
+See `tests/test_graph_builder_train_only.py` for examples.
 
 ---
 

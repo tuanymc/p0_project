@@ -11,7 +11,7 @@ import csv
 import itertools
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Sequence
 
 import numpy as np
 import pandas as pd
@@ -70,6 +70,64 @@ def infer_similarity_edges_from_train(
     result = pd.DataFrame(edges, columns=["src_kc", "dst_kc", "weight", "source"])
     logger.info("Inferred similarity edges shape=%s", result.shape)
     return result
+
+
+def evaluate_inferred_against_ground_truth(
+    inferred: pd.DataFrame,
+    expert: pd.DataFrame,
+    top_k_list: Sequence[int],
+) -> pd.DataFrame:
+    """Score inferred directed KC edges against an expert graph at several @k cuts.
+
+    *Top-k* rows are taken from ``inferred`` by descending ``support`` (ties keep
+    first occurrence). For that subset:
+    - *directed* hit: ``(src_kc, dst_kc)`` equals an expert row (direction matters).
+    - *undirected* hit: the unordered pair appears in the expert (either orientation).
+
+    Directed precision is ``directed_hits / undirected_hits`` (0 if no undirected
+    overlap). Directed recall is ``directed_hits / n_expert_edges``.
+    """
+    if "support" not in inferred.columns:
+        raise ValueError("inferred must include a 'support' column for @k evaluation")
+
+    expert_direct = set(
+        zip(expert["src_kc"].astype(int), expert["dst_kc"].astype(int), strict=True)
+    )
+    expert_undirected = {
+        frozenset(pair)
+        for pair in zip(expert["src_kc"].astype(int), expert["dst_kc"].astype(int), strict=True)
+    }
+    n_expert = len(expert)
+
+    rows: list[dict[str, float | int]] = []
+    for k in top_k_list:
+        k_int = int(k)
+        if k_int <= 0:
+            subset = inferred.iloc[0:0]
+        else:
+            subset = inferred.nlargest(k_int, "support", keep="first")
+
+        directed_hits = 0
+        undirected_hits = 0
+        for r in subset.itertuples(index=False):
+            s = int(getattr(r, "src_kc"))
+            d = int(getattr(r, "dst_kc"))
+            if (s, d) in expert_direct:
+                directed_hits += 1
+            if frozenset((s, d)) in expert_undirected:
+                undirected_hits += 1
+
+        directed_precision = (directed_hits / undirected_hits) if undirected_hits else 0.0
+        directed_recall = (directed_hits / n_expert) if n_expert else 0.0
+        rows.append({
+            "k": k_int,
+            "directed_hits": directed_hits,
+            "undirected_hits": undirected_hits,
+            "directed_precision": float(directed_precision),
+            "directed_recall": float(directed_recall),
+        })
+
+    return pd.DataFrame(rows)
 
 
 def infer_prerequisites_from_train(
