@@ -1,6 +1,299 @@
-@misc{p0_kc_graph_protocol,
-  title = {Leakage-Controlled Concept Graph Construction and Cold-Start Diagnostic Protocol for Knowledge Tracing},
-  author = {Dao, Minh Tuan},
-  year = {2026},
-  note = {Workshop paper artefact placeholder}
+% =============================================================================
+%  refs.bib  -- starter bibliography for P0 workshop paper
+%  WARNING: All entries must be VERIFIED against authoritative sources within
+%  two weeks of submission (see Survey Roadmap section 4 and 10.2 #9).
+%  Do NOT trust these entries blindly -- they are starter scaffolding.
+%
+%  Conventions:
+%    * Each entry has a `% verify:` comment with what to check.
+%    * Year, venue, and DOI/URL are the most likely to drift.
+%    * Post-2023 entries are flagged with `% POST-2023 -- RE-VERIFY` because
+%      the field of Graph-KT and SSL on graphs moves quickly.
+% =============================================================================
+
+
+% ---------------------------------------------------------------------------
+% A. KT BENCHMARK & LEAKAGE
+% ---------------------------------------------------------------------------
+
+@inproceedings{liu2022pykt,
+  author    = {Liu, Zitao and Liu, Qiongqiong and Chen, Jiahao and Huang, Shuyan and Tang, Jiliang and Luo, Weiqi},
+  title     = {{pyKT}: A {Python} Library to Benchmark Deep Learning Based Knowledge Tracing Models},
+  year      = {2022},
+  booktitle = {Advances in Neural Information Processing Systems},
+  editor    = {S. Koyejo and S. Mohamed and A. Agarwal and D. Belgrave and K. Cho and A. Oh},
+  volume    = {35},
+  pages     = {13248--13261},
+  publisher = {Curran Associates, Inc.},
+  url       = {https://proceedings.neurips.cc/paper_files/paper/2022/hash/558778f30960570a241476f4e648c66e-Abstract-Datasets_and_Benchmarks.html}
+}
+
+@article{abdelrahman2023kt_survey,
+  author     = {Abdelrahman, Ghodai and Wang, Qing and Nunes, Bernardo Pereira},
+  title      = {Knowledge Tracing: A Survey},
+  year       = {2023},
+  issue_date = {January 2024},
+  publisher  = {Association for Computing Machinery},
+  address    = {New York, NY, USA},
+  volume     = {55},
+  number     = {11},
+  issn       = {0360-0300},
+  url        = {https://doi.org/10.1145/3569576},
+  doi        = {10.1145/3569576},
+  journal    = {ACM Computing Surveys},
+  month      = feb,
+  articleno  = {224},
+  numpages   = {37}
+}
+
+
+% ---------------------------------------------------------------------------
+% B. KT BASELINES
+% ---------------------------------------------------------------------------
+
+@article{corbett1995bkt,
+  title   = {Knowledge Tracing: Modeling the Acquisition of Procedural Knowledge},
+  author  = {Corbett, Albert T. and Anderson, John R.},
+  journal = {User Modeling and User-Adapted Interaction},
+  volume  = {4},
+  pages   = {253--278},
+  year    = {1995}
+}
+
+@inproceedings{piech2015dkt,
+  title     = {Deep Knowledge Tracing},
+  author    = {Piech, Chris and Bassen, Jonathan and Huang, Jonathan and Ganguli, Surya and Sahami, Mehran and Guibas, Leonidas J. and Sohl-Dickstein, Jascha},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2015}
+}
+
+@inproceedings{zhang2017dkvmn,
+  title     = {Dynamic Key-Value Memory Networks for Knowledge Tracing},
+  author    = {Zhang, Jiani and Shi, Xingjian and King, Irwin and Yeung, Dit-Yan},
+  booktitle = {Proceedings of the 26th International Conference on World Wide Web (WWW)},
+  year      = {2017}
+}
+
+@inproceedings{ghosh2020akt,
+  title     = {Context-Aware Attentive Knowledge Tracing},
+  author    = {Ghosh, Aritra and Heffernan, Neil T. and Lan, Andrew S.},
+  booktitle = {Proceedings of the 26th ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD)},
+  year      = {2020}
+}
+
+@inproceedings{liu2023simplekt,
+  title     = {{simpleKT}: A Simple But Tough-to-Beat Baseline for Knowledge Tracing},
+  author    = {Liu, Zitao and Liu, Qiongqiong and Chen, Jiahao and Huang, Shuyan and Luo, Weiqi},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2023}
+}
+
+
+% ---------------------------------------------------------------------------
+% C. GRAPH-BASED KT
+% ---------------------------------------------------------------------------
+
+@inproceedings{nakagawa2019gkt,
+  title     = {Graph-based Knowledge Tracing: Modeling Student Proficiency Using Graph Neural Network},
+  author    = {Nakagawa, Hiromi and Iwasawa, Yusuke and Matsuo, Yutaka},
+  booktitle = {IEEE/WIC/ACM International Conference on Web Intelligence (WI)},
+  year      = {2019}
+}
+
+@inproceedings{tong2020skt,
+  title     = {Structure-based Knowledge Tracing: An Influence Propagation View},
+  author    = {Tong, Shiwei and Liu, Qi and Huang, Wei and Liu, Zhenya and Chen, Enhong and others},
+  booktitle = {IEEE International Conference on Data Mining (ICDM)},
+  year      = {2020}
+}
+
+@inproceedings{yang2021gikt,
+  title     = {{GIKT}: A Graph-based Interaction Model for Knowledge Tracing},
+  author    = {Yang, Yang and Shen, Jian and Qu, Yunfei and Liu, Yifan and Wang, Kerong and Zhu, Yaoming and Zhang, Weinan and Yu, Yong},
+  booktitle = {Joint European Conference on Machine Learning and Knowledge Discovery in Databases (ECML-PKDD)},
+  year      = {2021}
+}
+@inproceedings{dygkt2024,
+  author    = {Cheng, Ke and Peng, Linzhi and Wang, Pengyang and Ye, Junchen and Sun, Leilei and Du, Bowen},
+  title     = {{DyGKT}: Dynamic Graph Learning for Knowledge Tracing},
+  year      = {2024},
+  isbn      = {9798400704901},
+  publisher = {Association for Computing Machinery},
+  address   = {New York, NY, USA},
+  url       = {https://doi.org/10.1145/3637528.3671773},
+  doi       = {10.1145/3637528.3671773},
+  booktitle = {Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining},
+  pages     = {377--388},
+  numpages  = {12},
+  location  = {Barcelona, Spain},
+  series    = {KDD '24}
+}
+
+@article{dgekt2024,
+  author     = {Cui, Chaoran and Yao, Yumo and Zhang, Chunyun and Ma, Hebo and Ma, Yuling and Ren, Zhaochun and Zhang, Chen and Ko, James},
+  title      = {{DGEKT}: A Dual Graph Ensemble Learning Method for Knowledge Tracing},
+  year       = {2024},
+  publisher  = {Association for Computing Machinery},
+  address    = {New York, NY, USA},
+  volume     = {42},
+  number     = {5},
+  issn       = {1046-8188},
+  url        = {https://doi.org/10.1145/3638350},
+  doi        = {10.1145/3638350},
+  journal    = {ACM Transactions on Information Systems},
+  month      = may,
+  articleno  = {126},
+  numpages   = {26}
+}
+
+% ---------------------------------------------------------------------------
+% D. PREREQUISITE RELATION LEARNING
+% ---------------------------------------------------------------------------
+
+@article{bai2025survey,
+  author     = {Bai, Youheng and Liu, Zitao and Guo, Teng and Hou, Mingliang and Xiao, Kui},
+  title      = {Prerequisite Relation Learning: A Survey and Outlook},
+  year       = {2025},
+  publisher  = {Association for Computing Machinery},
+  address    = {New York, NY, USA},
+  volume     = {57},
+  number     = {6},
+  issn       = {0360-0300},
+  url        = {https://doi.org/10.1145/3733593},
+  doi        = {10.1145/3733593},
+  journal    = {ACM Computing Surveys},
+  month      = may,
+  articleno  = {138},
+  numpages   = {37}
+}
+
+% ---------------------------------------------------------------------------
+% E. GRAPH AUGMENTATION & CONTRASTIVE LEARNING ON GRAPHS
+% ---------------------------------------------------------------------------
+
+@inproceedings{you2020graphcl,
+  title     = {Graph Contrastive Learning with Augmentations},
+  author    = {You, Yuning and Chen, Tianlong and Sui, Yongduo and Chen, Ting and Wang, Zhangyang and Shen, Yang},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2020}
+}
+
+@inproceedings{zhu2021gca,
+  title     = {Graph Contrastive Learning with Adaptive Augmentation},
+  author    = {Zhu, Yanqiao and Xu, Yichen and Yu, Feng and Liu, Qiang and Wu, Shu and Wang, Liang},
+  booktitle = {Proceedings of the Web Conference (WWW)},
+  year      = {2021}
+}
+
+@inproceedings{xia2022simgrace,
+  title     = {{SimGRACE}: A Simple Framework for Graph Contrastive Learning without Data Augmentation},
+  author    = {Xia, Jun and Wu, Lirong and Chen, Jintao and Hu, Bozhen and Li, Stan Z.},
+  booktitle = {Proceedings of the ACM Web Conference (WWW)},
+  year      = {2022}
+}
+
+@article{thakoor2021bgrl,
+  title   = {Bootstrapped Representation Learning on Graphs},
+  author  = {Thakoor, Shantanu and Tallec, Corentin and Azar, Mohammad Gheshlaghi and Munos, R{\'e}mi and Veli{\v{c}}kovi{\'c}, Petar and Valko, Michal},
+  journal = {arXiv preprint arXiv:2102.06514},
+  year    = {2021}
+}
+
+
+% ---------------------------------------------------------------------------
+% F. CONTRASTIVE KT (CLOSE TO P2)
+% ---------------------------------------------------------------------------
+
+@inproceedings{lee2022cl4kt,
+  title     = {{CL4KT}: Contrastive Learning for Knowledge Tracing},
+  author    = {Lee, Wonsung and Chun, Jaeyoon and Lee, Youngnam and Park, Kyoungsoo and Park, Sungrae},
+  booktitle = {Proceedings of the ACM Web Conference (WWW)},
+  year      = {2022}
+}
+
+@article{song2022biclkt,
+  author  = {Song, Xiangyu and Li, Jianxin and Lei, Qi and Zhao, Wei and Chen, Yunliang and Mian, Ajmal},
+  title   = {{Bi-CLKT}: Bi-Graph Contrastive Learning based Knowledge Tracing},
+  journal = {Knowledge-Based Systems},
+  volume  = {241},
+  pages   = {108274},
+  year    = {2022},
+  doi     = {10.1016/j.knosys.2022.108274}
+}
+@article{deckt2025,
+  title     = {A Dual-Encoder Contrastive Learning Model for Knowledge Tracing},
+  author    = {Wang, Shixiang and Lin, Jiahui and Huang, Shulin and Wang, Jiahao and Wu, Jinchun},
+  journal   = {Entropy},
+  volume    = {27},
+  number    = {7},
+  pages     = {685},
+  year      = {2025},
+  doi       = {10.3390/e27070685},
+  url       = {https://www.mdpi.com/1099-4300/27/7/685},
+  publisher = {MDPI}
+}
+
+
+% ---------------------------------------------------------------------------
+% G. CALIBRATION (FOR P1 MOTIVATION)
+% ---------------------------------------------------------------------------
+
+@inproceedings{guo2017calibration,
+  title     = {On Calibration of Modern Neural Networks},
+  author    = {Guo, Chuan and Pleiss, Geoff and Sun, Yu and Weinberger, Kilian Q.},
+  booktitle = {International Conference on Machine Learning (ICML)},
+  year      = {2017}
+}
+
+@article{delong1988auc,
+  title   = {Comparing the Areas under Two or More Correlated Receiver Operating Characteristic Curves: A Nonparametric Approach},
+  author  = {DeLong, Elizabeth R. and DeLong, David M. and Clarke-Pearson, Daniel L.},
+  journal = {Biometrics},
+  volume  = {44},
+  number  = {3},
+  pages   = {837--845},
+  year    = {1988}
+}
+
+
+% ---------------------------------------------------------------------------
+% H. DATASETS
+% ---------------------------------------------------------------------------
+
+@inproceedings{choi2020ednet,
+  title     = {{EdNet}: A Large-Scale Hierarchical Dataset in Education},
+  author    = {Choi, Youngduck and Lee, Youngnam and Shin, Dongmin and Cho, Junghyun and Park, Seoyon and Lee, Seewoo and Baek, Jineon and Bae, Chan and Kim, Byungsoo and Heo, Jaewe},
+  booktitle = {International Conference on Artificial Intelligence in Education (AIED)},
+  year      = {2020}
+}
+
+@inproceedings{xes3g5m2023,
+  title     = {{XES3G5M}: A Knowledge Tracing Benchmark Dataset with Auxiliary Information},
+  author    = {Liu, Zitao and Liu, Qiongqiong and Guo, Teng and Chen, Jiahao and Huang, Shuyan and Zhao, Xiangyu and Tang, Jiliang and Luo, Weiqi and Weng, Jian},
+  booktitle = {Advances in Neural Information Processing Systems},
+  editor    = {A. Oh and T. Naumann and A. Globerson and K. Saenko and M. Hardt and S. Levine},
+  volume    = {36},
+  pages     = {40643--40662},
+  year      = {2023},
+  url       = {https://proceedings.neurips.cc/paper_files/paper/2023/hash/67fc628f17c2ad53621fb961c6bafcaf-Abstract-Datasets_and_Benchmarks.html}
+}
+
+
+@misc{junyi_dataset,
+  title        = {Junyi Academy Online Learning Activity Dataset},
+  author       = {{Junyi Academy}},
+  year         = {2015},
+  howpublished = {PSLC DataShop},
+  url          = {https://pslcdatashop.web.cmu.edu/DatasetInfo?datasetId=1198},
+  note         = {Available at PSLC DataShop}
+}
+@article{johnson1975finding,
+  author  = {Johnson, Donald B.},
+  title   = {Finding All the Elementary Circuits of a Directed Graph},
+  journal = {SIAM Journal on Computing},
+  volume  = {4},
+  number  = {1},
+  pages   = {77--84},
+  year    = {1975},
+  doi     = {10.1137/0204007}
 }

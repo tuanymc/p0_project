@@ -1,6 +1,10 @@
 dataset,n_nodes,n_edges,n_roots,n_leaves,n_cycles_before,n_cycles_after,topo_sort_passed,fold
-assist2012,139,261,34,23,100,0,True,
+assist2012,139,261,34,23,100,0,True,0.0
+assist2012,141,264,33,25,100,0,True,1.0
+assist2012,140,258,33,24,100,0,True,2.0
 junyi,573,1139,90,92,100,0,True,0.0
 junyi,578,1147,89,95,100,0,True,1.0
 junyi,576,1130,88,93,100,0,True,2.0
-xes3g5m,455,701,129,73,100,0,True,
+xes3g5m,455,701,129,73,100,0,True,0.0
+xes3g5m,453,700,129,70,100,0,True,1.0
+xes3g5m,455,707,127,71,100,0,True,2.0

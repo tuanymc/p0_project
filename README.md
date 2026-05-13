@@ -1,67 +1,78 @@
 # P0: Leakage-Controlled KC Graph Construction & Cold-Start Diagnostic Protocol
 
-Companion code repository for the workshop paper *"Leakage-Controlled Concept
-Graph Construction and Cold-Start Diagnostic Protocol for Knowledge
-Tracing"* (P0 of the GraphKT-ITS thesis).
+Companion code repository for the resource paper *Leakage-Controlled Concept
+Graph Construction and Cold-Start Diagnostic Protocol for Knowledge Tracing*
+(LLNC-style manuscript under `paper/main.tex`, thesis GraphKT-ITS track).
 
-> **What this repo is.** A protocol/audit pipeline for building and checking
-> multi-relational concept graphs from KT logs without data leakage, plus a
-> cold-start KC diagnostic and a DAG Disruption Rate metric.
+> **What this repo is.** A protocol and audit pipeline for building and
+> checking multi-relational concept graphs from KT logs under train-only,
+> fold-aware discipline; cold-start KC stratification; a DAG Disruption Rate
+> (**DDR**) probe over generic graph augmentations; and optional **ground-truth
+> cross-validation** on Junyi (expert prerequisite DAG vs train-only inferred
+> edges).
 >
-> **What this repo is NOT.** A new KT model. There is no claim of SOTA, no
-> claim about real-world learning outcomes, and no joint SSL training.
+> **What this repo is NOT.** A new KT baseline aimed at SOTA. No claim about
+> real-world learning outcomes or joint self-supervised graph pretraining.
 
 ---
 
 ## Table of contents
 
-1. [Quick start (minimal pipeline on Junyi)](#1-quick-start)
+1. [Quick start](#1-quick-start)
 2. [Environment setup](#2-environment-setup)
 3. [Data download and preparation](#3-data-download-and-preparation)
-4. [Running the full pipeline](#4-running-the-full-pipeline)
+4. [Running the full pipeline (all benchmarks)](#4-running-the-full-pipeline-all-benchmarks)
 5. [Per-stage commands](#5-per-stage-commands)
-6. [Outputs and where they live](#6-outputs)
-7. [Reproducing every figure and table](#7-reproducing-every-figure-and-table)
+6. [Outputs and where they live](#6-outputs-and-where-they-live)
+7. [Paper artefacts and LaTeX paths](#7-paper-artefacts-and-latex-paths)
 8. [Troubleshooting](#8-troubleshooting)
 9. [Project structure](#9-project-structure)
-10. [Citation, licence, and contact](#10-citation)
+10. [Citation, licence, and contact](#10-citation-licence-and-contact)
 
 ---
 
 ## 1. Quick start
 
-After completing [§2 Environment setup](#2-environment-setup) and
-[§3 Data download](#3-data-download-and-preparation):
+After [§2 Environment setup](#2-environment-setup) and
+[§3 Data](#3-data-download-and-preparation), run a **single-dataset** smoke
+pipeline (Junyi):
 
 ```bash
 bash scripts/run_junyi_minimal.sh
 ```
 
-Expected runtime: **~5–15 minutes** on a laptop CPU (longer if `torch`
-baselines are enabled).
+On **Windows** (PowerShell, repo root):
 
-Expected console tail:
-
-```
-[ split_checker     ] OK   - no learner overlap; temporal ordering verified
-[ graph_builder     ] OK   - 3 folds; edges_train_only.csv written
-[ dag_audit         ] OK   - cycles_before=0, topo_sort=passed
-[ dag_disruption    ] OK   - DDR sweep written: 4 augmentations × 4 ps
-[ cold_start_report ] OK   - 4 strata; report_md emitted
-[ baseline_runner   ] OK   - BKT/DKT diagnostic table written
-[ report_generator  ] OK   - results/reports/p0_diagnostic_report.md
+```powershell
+$env:PYTHON = "python"   # optional
+bash scripts/run_junyi_minimal.sh
 ```
 
-A short summary report appears at
-`results/reports/p0_diagnostic_report.md`.
+If you do not have Git Bash/WSL, run the same stages by hand (see
+[§5](#5-per-stage-commands)); or use `scripts/run_all_datasets_full.ps1` for
+everything including paper tables (see [§4](#4-running-the-full-pipeline-all-benchmarks)).
+
+**Runtime.** Roughly tens of minutes on a laptop CPU for Junyi end-to-end if
+deep baselines (`torch`) are enabled; longer for full three-dataset runs and
+multi-fold baselines. Junyi preprocess + graph stages are memory-heavy; prefer
+`--server` / `-ServerProfile` on ~32 GB RAM hosts (see full pipeline scripts).
+
+**Sanity.** `split_checker` should report no learner leakage and temporal
+ordering OK. `dag_audit` may report `cycles_before` hitting the **representative
+cycle cap (100)** on dense graphs; the pruning loop still runs until the graph
+is acyclic (see `paper/main.tex` / `src/dag_audit.py`).
+
+**Reports.** `results/reports/p0_diagnostic_report.md` aggregates available
+CSVs and markdown reports.
 
 ---
 
 ## 2. Environment setup
 
-Tested on **Python 3.10 / 3.11**, Linux and macOS. Windows works under WSL2.
+Tested with **Python 3.10 / 3.11** (3.12+ often works). Linux, macOS, and
+**Windows** (PowerShell + native Python) are supported; WSL2 remains optional.
 
-### 2.1 Create a virtual environment
+### 2.1 Virtual environment
 
 ```bash
 python -m venv .venv
@@ -69,27 +80,26 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install --upgrade pip
 ```
 
-### 2.2 Install dependencies
+### 2.2 Dependencies
 
 ```bash
 pip install -r requirements.txt
-pip install -e .                   # registers the p0-* console scripts
+pip install -e .
 ```
 
-### 2.3 Verify the install
+### 2.3 Tests
+
+From the repository root:
 
 ```bash
 pytest -q
 ```
 
-You should see the train-only contract tests **pass** and the algorithm
-tests marked **xfail** (expected — the algorithms are not yet implemented).
-
 ### 2.4 GPU (optional)
 
-`torch` is needed only for DKT / simpleKT / AKT baselines. CPU works for
-the full diagnostic pipeline. To use a GPU, install the matching CUDA build
-of PyTorch *after* the requirements install:
+`torch` is required for DKT / simpleKT / AKT / GKT / GIKT style baselines.
+CPU is acceptable for structural stages only. Install a CUDA build of
+PyTorch that matches your stack if needed:
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cu121
@@ -99,190 +109,220 @@ pip install torch --index-url https://download.pytorch.org/whl/cu121
 
 ## 3. Data download and preparation
 
-We use **public KT benchmarks only**. Each dataset has its own licence;
-read and respect it before downloading.
+Public KT benchmarks only; respect each dataset licence.
 
-| Dataset | Required for P0 | Has prerequisite DAG? | License notes |
-|---|---|---|---|
-| Junyi Academy | yes | yes (ground truth) | Check the Junyi release / PSLC DataShop entry. |
-| ASSISTments 2012 | yes | no (must infer) | Check the ASSISTments release. |
-| XES3G5M | recommended | yes | Verify dataset card before camera-ready. |
-| EdNet KT1 | not required | partial | Optional only. |
+| Dataset | Role in P0 | External prerequisite DAG | Notes |
+|--------|------------|----------------------------|--------|
+| Junyi Academy | Core | Yes (`junyi_dag.csv`) | Expert DAG used only in optional GT CV; train-only prerequisite edges `E_pre` are inferred like other benchmarks. |
+| ASSISTments 2012 | Core | No | Q-matrix only; `E_pre` inferred from train transitions. |
+| XES3G5M | Core | Metadata only | KC IDs from hierarchy labels; `E_pre` inferred from train transitions. |
 
-### 3.1 Folder layout
+### 3.1 Layout
 
-Place raw files under `data/raw/<dataset>/`:
+Place raw files under `data/raw/<dataset>/` (directories are gitignored).
+Example for Junyi (filenames must match `configs/junyi.yaml`):
 
 ```
-data/raw/
-├── junyi/
-│   ├── junyi_log.csv             # exact filenames depend on release
-│   └── junyi_dag.csv             # ground-truth prerequisite DAG
-├── assist2012/
-│   └── 2012-2013-data-with-predictions-4-final.csv
-└── xes3g5m/
-    └── ...
+data/raw/junyi/
+├── junyi_ProblemLog_original.csv   # interaction log (Chang et al. style)
+├── junyi_dag.csv                   # expert prerequisite annotation (GT CV)
+└── junyi_Exercise_table.csv       # used when building KC name→id mapping for GT CV
 ```
 
-These folders are **gitignored**.
+ASSISTments and XES3G5M paths are defined in `configs/assist2012.yaml` and
+`configs/xes3g5m.yaml`.
 
 ### 3.2 Preprocess
 
+Output path defaults from `processed_path` in each YAML. Override optional:
+
 ```bash
-python -m src.preprocess --config configs/junyi.yaml \
-                         --out    data/processed/junyi.parquet
+python -m src.preprocess --config configs/junyi.yaml
+# Optional explicit output:
+python -m src.preprocess --config configs/junyi.yaml --out data/processed/junyi.parquet
 ```
 
-This normalises columns to
-`user_id, item_id, kc_id, timestamp, correct` and writes a parquet file
-under `data/processed/`. Run the same command for the other configs.
+Canonical columns:
+`user_id, item_id, kc_id, timestamp, correct` → parquet under `data/processed/`.
 
-### 3.3 Sanity check
+### 3.3 Split check
 
 ```bash
 python -m src.split_checker --config configs/junyi.yaml
 ```
 
-The script must print:
-
-```
-[OK] No learner overlap between train / valid / test.
-[OK] Temporal order respected for all users.
-```
-
-Anything else means stop and fix before proceeding.
+Stop and fix any learner overlap or temporal violations before continuing.
 
 ---
 
-## 4. Running the full pipeline
+## 4. Running the full pipeline (all benchmarks)
 
-Once data is in place:
+End-to-end on **Junyi, ASSISTments 2012, and XES3G5M**: preprocess (unless
+parquet already exists), split check, graph build, DAG audit, DDR sweep,
+baseline runner, cold-start report, **`scripts/generate_paper_artifacts.py`**,
+and aggregated markdown report.
+
+**Linux / macOS (Git Bash):**
 
 ```bash
-bash scripts/run_junyi_minimal.sh
-bash scripts/run_assist_minimal.sh   # optional but recommended
+chmod +x scripts/run_all_datasets_full.sh
+./scripts/run_all_datasets_full.sh              # skip preprocess if parquet exists
+./scripts/run_all_datasets_full.sh --force-full # rebuild all parquet from raw
+./scripts/run_all_datasets_full.sh --server     # BLAS/thread caps for ~32 GB RAM
 ```
 
-You can also run all figure regeneration at once:
+**Windows (PowerShell, repo root):**
+
+```powershell
+.\scripts\run_all_datasets_full.ps1
+.\scripts\run_all_datasets_full.ps1 -ForceFull      # set FORCE_PREPROCESS=1
+.\scripts\run_all_datasets_full.ps1 -ServerProfile   # thread caps + PYTHONHASHSEED
+```
+
+Minimal per-dataset scripts (no cross-dataset paper aggregation):
+
+- `scripts/run_junyi_minimal.sh`
+- `scripts/run_assist_minimal.sh`
+- `scripts/run_xes3g5m_minimal.sh`
+
+Regenerate **DDR line plots only** (three PDFs under `results/figures/`):
 
 ```bash
 bash scripts/make_all_figures.sh
 ```
 
+**Optional — Junyi ground-truth cross-validation** (train-only inferred
+`e_pre_train_only.csv` vs expert DAG; requires preprocess/graph so that
+`data/processed/junyi/kc_name_to_id.json` exists):
+
+```bash
+python scripts/run_gt_cross_validation_junyi.py
+```
+
+Outputs: `results/gt_validation/junyi/` (`overlap_metrics_at_K.csv`,
+`fig_pr_curve.pdf`, `gt_validation_table.tex`, etc.).
+
 ---
 
 ## 5. Per-stage commands
 
-If you prefer to run stages one at a time (recommended while iterating):
+Typical order for one config (e.g. `configs/junyi.yaml`):
 
 ```bash
-# 1. Preprocess
 python -m src.preprocess          --config configs/junyi.yaml
-
-# 2. Build splits + sanity check
 python -m src.split_checker       --config configs/junyi.yaml
-
-# 3. Train-only graph construction
 python -m src.graph_builder       --config configs/junyi.yaml
-
-# 4. DAG audit (topological sort, cycle pruning)
 python -m src.dag_audit           --config configs/junyi.yaml
-
-# 5. DAG disruption sweep
 python -m src.dag_disruption      --config configs/junyi.yaml
-
-# 6. Cold-start KC diagnostic
-python -m src.cold_start_report   --config configs/junyi.yaml
-
-# 7. Baseline diagnostic (BKT, DKT, optional simpleKT/AKT)
 python -m src.baseline_runner     --config configs/junyi.yaml
-
-# 8. Aggregate report
-python -m src.report_generator    --out results/reports/
+python -m src.cold_start_report   --config configs/junyi.yaml
 ```
 
-Every command takes a `--seed` flag (default: 42) and a `--log-level` flag
-(`INFO` by default).
+Paper-facing tables from already-produced CSVs (dataset stats, baseline TeX,
+cold-start summary TeX, artefact index):
+
+```bash
+python scripts/generate_paper_artifacts.py
+python -m src.report_generator --out results/reports/
+```
+
+Most modules accept `--seed` (default `42`) and `--log-level` (`INFO` default).
+
+Fold-specific graph exports live under
+`data/processed/<dataset>/fold_<k>/` (e.g. `e_pre_train_only.csv`,
+`e_sim_train_only.csv`).
 
 ---
 
-## 6. Outputs
+## 6. Outputs and where they live
 
-| File | Stage | Description |
-|---|---|---|
-| `results/tables/dataset_stats.csv` | preprocess | #learners, #items, #KCs, #interactions, avg seq length |
-| `results/tables/graph_stats.csv` | graph_builder | per-fold edge counts, degree stats, root/leaf counts |
-| `results/tables/dag_disruption.csv` | dag_disruption | DDR per augmentation × p × seed |
-| `results/tables/baseline_results.csv` | baseline_runner | BKT/DKT diagnostic AUC/ACC/NLL |
-| `results/figures/fig_ddr.pdf` | dag_disruption | line chart DDR vs p (4 augmentations) |
-| `results/figures/fig_cold_start.pdf` | cold_start_report | per-stratum AUC bar chart |
-| `results/reports/dag_report.md` | dag_audit | full DAG audit log |
-| `results/reports/cold_start_report.md` | cold_start_report | cold-start KC diagnostic |
-| `results/reports/p0_diagnostic_report.md` | report_generator | aggregated single-page summary |
-| `logs/leakage_audit_log.csv` | every stage | edge provenance log; one row per edge |
-| `logs/experiment_log.csv` | every stage | one row per script run |
+| Location | Produced by | Role |
+|----------|-------------|------|
+| `data/processed/*.parquet` | `preprocess` | Canonical interaction tables |
+| `data/processed/<ds>/fold_*/e_pre_train_only.csv` | `graph_builder` | Train-only prerequisite candidates |
+| `data/processed/<ds>/fold_*/e_sim_train_only.csv` | `graph_builder` | Train-only similarity edges |
+| `results/tables/dataset_stats.csv` (+ `.tex`) | `generate_paper_artifacts.py` | Dataset scale summary |
+| `results/tables/graph_stats.csv` | `graph_builder` | Per-fold edge / KC counts |
+| `results/tables/dag_audit_summary.csv` (+ `.tex`) | Manual / pipeline notes | Fold-wise DAG audit rows (`dag_audit` writes CSV) |
+| `results/reports/<dataset>_dag_report.md` | `dag_audit` | Human-readable audit |
+| `results/reports/<dataset>_dag_pruning_log.csv` | `dag_audit` | Pruned edges trail |
+| `results/tables/dag_disruption.csv` | `dag_disruption` | Raw DDR rows (fold × aug × p × seed) |
+| `results/tables/dag_disruption_summary.csv` | `dag_disruption` | Means/CIs used in paper DDR table |
+| `results/figures/fig_ddr_<dataset>.pdf` | `dag_disruption` | DDR vs `p` line chart per dataset |
+| `results/tables/baseline_results.csv` (+ `.tex`) | `baseline_runner` + `generate_paper_artifacts` | Multi-fold means + bootstrap CIs when enabled |
+| `results/tables/cold_start_metrics.csv` (+ `.tex`) | `cold_start_report` + artefacts script | Stratum summaries |
+| `results/tables/cold_start_by_stratum.tex` | From cold-start pipeline / artefacts | Per-stratum table for paper |
+| `results/reports/cold_start_report.md` | `cold_start_report` | Narrative cold-start report |
+| `results/reports/paper_artifact_index.md` | `generate_paper_artifacts.py` | Index of tables/figures/reports |
+| `results/reports/p0_diagnostic_report.md` | `report_generator` | Aggregated diagnostic markdown |
+| `results/gt_validation/junyi/*` | `run_gt_cross_validation_junyi.py` | GT overlap metrics, PR curve, TeX snippet |
+| `logs/leakage_audit_log.csv` | Multiple stages | Edge provenance audit trail |
+| `logs/experiment_log.csv` | Run hooks | Run ledger (if configured) |
 
 ---
 
-## 7. Reproducing every figure and table
+## 7. Paper artefacts and LaTeX paths
 
-Each figure/table in the paper is produced by one script with one config.
-The mapping is:
+- **Manuscript:** `paper/main.tex`, bibliography `paper/refs.bib`.
+- **Inputs pulled from `results/`:** `\input{results/tables/dataset_stats.tex}`,
+  `dag_audit_summary.tex`, `cold_start_by_stratum.tex`, `baseline_results.tex`,
+  and GT material under `results/gt_validation/junyi/` (see `main.tex`).
+- **Build tip:** compile LaTeX with the **repository root** as the working
+  directory so paths such as `results/tables/...` and `results/figures/...`
+  resolve. Figures `fig_ddr_*.pdf` appear after running `dag_disruption` (or
+  `make_all_figures.sh`); `fig_pr_curve.pdf` for GT lives under
+  `results/gt_validation/junyi/` after running the GT script.
 
-| Paper artefact | Script | Config |
-|---|---|---|
-| Table: Dataset statistics | `src/preprocess.py` | all configs |
-| Table: Leakage audit | `src/split_checker.py` + log aggregator | all configs |
-| Table: Graph audit | `src/graph_builder.py` + `src/dag_audit.py` | all configs |
-| Figure: DDR vs p | `src/dag_disruption.py` | `junyi.yaml` (XES3G5M optional) |
-| Figure / Table: Cold-start KC diagnostic | `src/cold_start_report.py` | all configs |
-| Table: Baseline diagnostic | `src/baseline_runner.py` | `junyi.yaml`, `assist2012.yaml` |
+Regeneration recipe aligned with the README scripts:
 
-Run `bash scripts/make_all_figures.sh` to refresh everything in one go.
+1. `./scripts/run_all_datasets_full.sh --server` (or the `.ps1` equivalent).  
+2. `python scripts/run_gt_cross_validation_junyi.py` (optional).  
+3. `latexmk` / `pdflatex` from repo root on `paper/main.tex`.
 
 ---
 
 ## 8. Troubleshooting
 
-**Import error after `pip install -e .`** — ensure you ran the install from
-the repo root, and that the active interpreter matches your venv.
+**Import errors after `pip install -e .`** — Run commands from the repo root;
+ensure the active interpreter is the venv you installed into.
 
-**Pipeline complains about a fold containing test users** — your raw data
-or split config is wrong. Run `python -m src.split_checker --config <cfg>
---verbose` and inspect the report. Do not silence the assertion.
+**Split checker failures** — Inspect `python -m src.split_checker --config …`
+(do not bypass assertions). Raw CSV paths and schema mapping in YAML must
+match your download.
 
-**`leakage_audit_log.csv` has rows with `train_only_flag = False`** —
-**stop**. This is a hard fail. Identify the offending stage, fix it, and
-re-run from preprocess.
+**`leakage_audit_log.csv` contains non-train-only edges** — Treat as a hard
+protocol violation: fix the offending stage and rerun from a clean state.
 
-**Reproduction gap > 5% from the original baseline paper** — that is
-acceptable for a P0 diagnostic. Document the gap in
-`results/reports/p0_diagnostic_report.md` under "Reproduction notes" and
-do not tune hyperparameters to match.
+**DDR plots missing** — Run `python -m src.dag_disruption --config configs/<ds>.yaml`
+for each dataset, or `bash scripts/make_all_figures.sh`.
 
-**`fig_ddr.pdf` looks flat (DDR ~ 0 for all augmentations)** — verify the
-DDR formula in `src/dag_disruption.py` matches the paper definition (see
-Survey Roadmap §6.2). A flat curve is a valid empirical finding; report it
-honestly in the manuscript and limitations section.
+**Junyi GT CV missing mapping** — Ensure preprocess/graph ran so
+`data/processed/junyi/kc_name_to_id.json` exists; expert CSV paths match
+`run_gt_cross_validation_junyi.py` defaults.
+
+**Baseline RAM / time** — Reduce folds in YAML (`split.n_folds`) or disable
+heavy models in `configs/*.yaml` under `baselines:` while debugging structure-only stages.
 
 ---
 
 ## 9. Project structure
 
 ```
-p0-kc-graph-protocol/
-├── README.md                ← this file
+p0_project/
+├── README.md
 ├── requirements.txt
 ├── pyproject.toml
 ├── configs/
 │   ├── junyi.yaml
 │   ├── assist2012.yaml
 │   └── xes3g5m.yaml
+├── paper/
+│   ├── main.tex
+│   └── refs.bib
 ├── data/
-│   ├── raw/                 ← gitignored; place datasets here
-│   └── processed/           ← gitignored; produced by preprocess.py
+│   ├── raw/              # gitignored — place benchmarks here
+│   └── processed/        # gitignored — parquet + fold exports
 ├── src/
-│   ├── io_utils.py
 │   ├── preprocess.py
 │   ├── split_checker.py
 │   ├── graph_builder.py
@@ -290,38 +330,38 @@ p0-kc-graph-protocol/
 │   ├── dag_disruption.py
 │   ├── cold_start_report.py
 │   ├── baseline_runner.py
-│   └── report_generator.py
+│   ├── gt_cross_validation.py
+│   ├── report_generator.py
+│   └── io_utils.py
 ├── scripts/
 │   ├── run_junyi_minimal.sh
 │   ├── run_assist_minimal.sh
-│   └── make_all_figures.sh
+│   ├── run_xes3g5m_minimal.sh
+│   ├── run_all_datasets_full.sh
+│   ├── run_all_datasets_full.ps1
+│   ├── make_all_figures.sh
+│   ├── generate_paper_artifacts.py
+│   ├── run_gt_cross_validation_junyi.py
+│   └── …
 ├── tests/
-│   ├── test_split_checker.py
-│   ├── test_graph_builder_train_only.py
-│   ├── test_dag_audit.py
-│   └── test_dag_disruption.py
 ├── results/
 │   ├── tables/
 │   ├── figures/
-│   └── reports/
-├── logs/
-│   ├── leakage_audit_log.csv
-│   ├── literature_search_log.csv
-│   └── experiment_log.csv
-└── paper/
-    └── refs.bib
+│   ├── reports/
+│   └── gt_validation/junyi/   # after GT script
+└── logs/
 ```
 
 ---
 
-## 10. Citation
+## 10. Citation, licence, and contact
 
-If you use this code, please cite the P0 paper once it is released. A
-placeholder BibTeX entry is provided in `paper/refs.bib` and will be
-updated upon publication.
+If you use this code or protocol, please cite the P0 paper once it is public.
+BibTeX placeholders live in `paper/refs.bib` and will be updated on publication.
 
-**Licence.** Code: MIT (or institution-specific — confirm with supervisor
-before public release). Data: each dataset retains its original licence.
+**Licence.** Confirm code licence (e.g. MIT) with your institution before a
+public release. Dataset licences remain with their respective publishers.
 
-**Contact.** Dao Minh Tuan — `tuan.ymc@gmail.com`. PhD candidate,
-GraphKT-ITS thesis. Issues and pull requests welcome via the repository.
+**Contact.** Dao Minh Tuan — `tuan.ymc@gmail.com`. Issues and improvements
+welcome via the repository host (e.g.
+https://github.com/tuanymc/p0_project.git).

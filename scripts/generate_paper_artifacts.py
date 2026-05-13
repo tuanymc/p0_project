@@ -59,7 +59,10 @@ def _write_dataset_stats_tex(stats: pd.DataFrame, path: Path) -> None:
     lines = [
         r"\begin{table}[t]",
         r"\centering",
-        r"\caption{Dataset statistics used in the P0 diagnostic protocol.}",
+        r"\caption{Dataset statistics used in the P0 diagnostic protocol. "
+        r"Junyi Academy counts reflect the Chang et al.\ problem-level log "
+        r"(\texttt{junyi\_ProblemLog\_original.csv}) after preprocessing; "
+        r"\#items and \#KCs coincide because both map to the exercise column.}",
         r"\label{tab:dataset-stats}",
         r"\begin{tabular}{lrrrrrl}",
         r"\toprule",
@@ -86,6 +89,10 @@ def _write_baseline_tex(path: Path) -> None:
         return
     df = pd.read_csv(csv_path)
     if df.empty or not {"dataset", "model", "auc", "acc", "nll"}.issubset(df.columns):
+        return
+    # Drop template / incomplete rows (e.g. status=pending_data with empty dataset) that would render as "nan" in TeX.
+    df = df[df["dataset"].notna() & (df["dataset"].astype(str).str.strip() != "")]
+    if df.empty:
         return
     has_ci = {"auc_ci_low", "auc_ci_high", "acc_ci_low", "acc_ci_high", "nll_ci_low", "nll_ci_high"}.issubset(df.columns)
     lines = [

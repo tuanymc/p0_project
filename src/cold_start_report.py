@@ -65,7 +65,13 @@ def _binary_roc_auc_mann_whitney(y_true: np.ndarray, y_score: np.ndarray) -> flo
         ranks[i:j] = avg_rank
         i = j
 
-    rank_sum_pos = float(np.sum(ranks[pos_sorted]))
+    del sorted_scores
+    # Boolean indexing ``ranks[pos_sorted]`` allocates an (n_pos,) array (~50MB+); chunk dot avoids it.
+    chunk_size = 500_000
+    rank_sum_pos = 0.0
+    for start in range(0, n, chunk_size):
+        end = min(start + chunk_size, n)
+        rank_sum_pos += float(np.dot(ranks[start:end], pos_sorted[start:end]))
     return (rank_sum_pos - n_pos * (n_pos + 1) / 2.0) / (n_pos * n_neg)
 
 
