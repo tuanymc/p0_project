@@ -111,6 +111,12 @@ pip install torch --index-url https://download.pytorch.org/whl/cu121
 
 Public KT benchmarks only; respect each dataset licence.
 
+**Optional bundle.** A project-maintained Google Drive folder with the expected
+subfolders (`raw/`, `processed/`, `graphs/`, plus a short `README.md` inside the
+drive) is here: [P0 data (Google Drive)](https://drive.google.com/drive/folders/1eQNSTV0pVDeB79Mx--vnPml_YPYwVzDP?usp=sharing).
+Download what you need and place files under your local `data/` tree as in
+[§3.1](#31-layout); licences of the underlying benchmarks still apply.
+
 | Dataset | Role in P0 | External prerequisite DAG | Notes |
 |--------|------------|----------------------------|--------|
 | Junyi Academy | Core | Yes (`junyi_dag.csv`) | Expert DAG used only in optional GT CV; train-only prerequisite edges `E_pre` are inferred like other benchmarks. |
