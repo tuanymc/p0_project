@@ -21,3 +21,11 @@ p0-dag-disrupt = "src.dag_disruption:main"
 p0-cold-start = "src.cold_start_report:main"
 p0-baseline = "src.baseline_runner:main"
 p0-export-full-log-graph = "src.export_full_log_graph:main"
+
+[project.optional-dependencies]
+pykt = [
+  "torch>=2.1",
+  # Pinned via git submodule at third_party/pykt-toolkit (see .gitmodules).
+  "pykt-toolkit @ file:./third_party/pykt-toolkit",
+  "scipy>=1.10",
+]

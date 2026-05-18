@@ -12,12 +12,14 @@ scored using **train-fold** outcomes only; for ``"full_log"``, edge lists come f
 entire preprocessed interaction table so the ablation reflects both topology and
 statistics from the full log, not topology alone.
 
-Optional ``graph_ablation.trained_leakage_head`` replaces the fixed diagnostic weights for
-graph-augmented models with a **logistic regression head** fit by mini-batch gradient descent
-**only on the train fold** (labels and identity users/items unchanged). The global/KC/item/user/freq
-channels still come from train-fold statistics; only the graph channel (and its backing pooling)
-differs between ``train_only`` and ``full_log``. That makes leakage easier to surface than with a
-frozen blend because coefficients can up-weight the leaked graph signal.
+Optional ``evaluation.baseline_backend: pykt`` (plus extras ``pip install -e ".[pykt]"``) switches **BKT**
+to a classical multi-skill EM fit (SciPy) and **DKT / AKT / GKT / simpleKT** to real ``pykt-toolkit``
+training with **GKT** adjacency matrices built from this repo's exported prerequisite/similarity CSVs
+(train-only vs full-log when running graph ablation). **GIKT** is not implemented in pyKT; we map it to **AKT**
+and record that in result metadata.
+
+Optional ``graph_ablation.trained_leakage_head`` still applies only to **diagnostic** graph baselines (linear /
+logistic head), not to pyKT checkpoints.
 """
 
 from __future__ import annotations
@@ -51,6 +53,39 @@ MODEL_WEIGHTS = {
 
 # Stable channel order for stacking trainable leakage-head features (subset per model).
 _DIAGNOSTIC_FEATURE_ORDER = ("global", "kc", "item", "user", "graph", "freq")
+
+# pyKT neural runners (GIKT maps to AKT — pyKT does not ship GIKT). BKT uses classical EM separately.
+_PYKT_NEURAL_ALIASES = {"gikt": "akt"}
+_PYKT_NEURAL_NAMES = frozenset({"dkt", "akt", "gkt", "simplekt"} | set(_PYKT_NEURAL_ALIASES))
+
+
+def _evaluation_backend(cfg: dict, args: argparse.Namespace) -> str:
+    if getattr(args, "baseline_backend", None):
+        return str(args.baseline_backend).strip().lower()
+    return str(cfg.get("evaluation", {}).get("baseline_backend", "diagnostic")).strip().lower()
+
+
+def _pykt_global_cfg(cfg: dict) -> dict:
+    return cfg.get("pykt", {}) if isinstance(cfg.get("pykt"), dict) else {}
+
+
+def _hyperparams_for_baseline(cfg: dict, model_name: str) -> dict:
+    for item in cfg.get("baselines") or []:
+        if item.get("name") == model_name and isinstance(item.get("hyperparams"), dict):
+            return dict(item["hyperparams"])
+    return {}
+
+
+def _protocol_edge_csvs(dataset: str, fold: int, graph_construction: str) -> list[Path]:
+    if graph_construction == "full_log":
+        return [
+            Path("data/processed") / dataset / "full_log" / "e_pre.csv",
+            Path("data/processed") / dataset / "full_log" / "e_sim.csv",
+        ]
+    return [
+        Path("data/processed") / dataset / f"fold_{fold}" / "e_pre_train_only.csv",
+        Path("data/processed") / dataset / f"fold_{fold}" / "e_sim_train_only.csv",
+    ]
 
 
 def _feature_keys_for_model(name: str) -> tuple[str, ...]:
@@ -613,6 +648,152 @@ def _summarize_graph_ablation(fold_results: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _run_backend_fold(
+    cfg: dict,
+    args: argparse.Namespace,
+    *,
+    model: str,
+    splits: dict,
+    dataset: str,
+    fold: int,
+    split_seed: int | None,
+    graph_construction: str,
+    prediction_cap: int | None,
+    trained_head_cfg: dict,
+    experiment_seed: int,
+    backend: str,
+    full_df: pd.DataFrame,
+) -> tuple[dict, pd.DataFrame]:
+    """Dispatch diagnostic ensembles, classical BKT, or pyKT training."""
+    train = splits["train"]
+    eval_df = pd.concat([splits["valid"], splits["test"]], ignore_index=True)
+
+    uses_pykt_chain = backend == "pykt" and (
+        model == "bkt" or model in _PYKT_NEURAL_NAMES
+    )
+    if not uses_pykt_chain:
+        return _run_named_model(
+            model,
+            splits,
+            dataset=dataset,
+            fold=fold,
+            split_seed=split_seed,
+            graph_construction=graph_construction,
+            prediction_cap=prediction_cap,
+            full_interactions=full_df,
+            trained_head_cfg=trained_head_cfg,
+            experiment_seed=experiment_seed,
+        )
+
+    y_prob_eval: np.ndarray | None = None
+    if model == "bkt":
+        from src.classical_bkt import ClassicalBKTMultiSkill
+
+        bm = ClassicalBKTMultiSkill.fit(train)
+        y_prob_eval = bm.predict_probabilities(train, eval_df)
+        result = {
+            "dataset": dataset,
+            "fold": fold,
+            "split_seed": split_seed,
+            "model": model,
+            "graph_construction": graph_construction,
+            "eval_split": "valid+test",
+            **_metrics(eval_df["correct"], y_prob_eval),
+            "n_eval": len(eval_df),
+            "status": "classical_bkt_em",
+            "note": "Independent-skill BKT (scipy L-BFGS-B); protocol graphs do not affect this baseline.",
+        }
+    else:
+        try:
+            import torch  # noqa: F401
+
+            from src.pykt_engine import run_pykt_fold
+            from src.pykt_export import build_dense_maps, dataframe_to_pykt_csvs
+            from src.pykt_graph_matrix import edges_to_gkt_matrix, write_gkt_graph_npz
+        except ImportError as exc:
+            raise RuntimeError(
+                "baseline_backend=pykt requires PyTorch and pykt-toolkit "
+                "(pip install torch pykt-toolkit). simpleKT additionally needs pyKT from GitHub main."
+            ) from exc
+
+        pykt_name = _PYKT_NEURAL_ALIASES.get(model, model)
+        py_all = _pykt_global_cfg(cfg)
+        max_seq_len = int(py_all.get("max_seq_len", 200))
+        graph_tag = str(py_all.get("gkt_graph_tag", "p0_protocol"))
+        hp = _hyperparams_for_baseline(cfg, model)
+        epochs = int(hp.get("epochs", py_all.get("epochs", 30)))
+        batch_size = int(hp.get("batch_size", py_all.get("batch_size", 64)))
+        lr = float(hp.get("lr", py_all.get("lr", 1e-3)))
+
+        q_map, c_map = build_dense_maps(train)
+        base = (
+            Path("results/pykt_work")
+            / dataset
+            / f"fold_{fold}_seed_{split_seed}"
+            / graph_construction
+        )
+        work_dir = base / model
+        num_q, num_c = dataframe_to_pykt_csvs(
+            train_df=train,
+            valid_df=splits["valid"],
+            test_df=splits["test"],
+            q_map=q_map,
+            c_map=c_map,
+            out_dir=work_dir,
+            max_seq_len=max_seq_len,
+        )
+
+        graph_npz_path: Path | None = None
+        if pykt_name == "gkt":
+            shared = base / f"gkt_graph_{graph_tag}.npz"
+            if not shared.exists():
+                mat = edges_to_gkt_matrix(num_c, _protocol_edge_csvs(dataset, fold, graph_construction), c_map)
+                write_gkt_graph_npz(shared, mat)
+            graph_npz_path = shared
+
+        fit_seed = int(experiment_seed) + int(fold) * 97 + (3 if graph_construction == "full_log" else 0)
+        auc, acc, nll, note = run_pykt_fold(
+            display_model=model,
+            pykt_name=pykt_name,
+            work_dir=work_dir,
+            num_q=num_q,
+            num_c=num_c,
+            graph_npz=graph_npz_path,
+            graph_tag=graph_tag,
+            hyperparams=hp,
+            epochs=epochs,
+            batch_size=batch_size,
+            lr=lr,
+            seed=fit_seed,
+            max_seq_len=max_seq_len,
+        )
+        result = {
+            "dataset": dataset,
+            "fold": fold,
+            "split_seed": split_seed,
+            "model": model,
+            "graph_construction": graph_construction,
+            "eval_split": "valid+test",
+            "auc": auc,
+            "acc": acc,
+            "nll": nll,
+            "n_eval": len(eval_df),
+            "status": "pykt_checkpoint",
+            "note": note,
+        }
+
+    cap = len(eval_df) if prediction_cap is None else min(int(prediction_cap), len(eval_df))
+    tail = eval_df.iloc[:cap]
+    predictions = tail[["user_id", "item_id", "kc_id", "correct"]].rename(columns={"correct": "y_true"}).copy()
+    predictions["fold"] = fold
+    predictions["model"] = model
+    if y_prob_eval is not None:
+        predictions["y_prob"] = y_prob_eval[:cap]
+    else:
+        predictions["y_prob"] = np.full(cap, np.nan, dtype=float)
+    return result, predictions
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run baseline diagnostics")
     parser.add_argument("--config", type=Path, required=False)
@@ -633,6 +814,12 @@ def main() -> None:
         action="store_true",
         help="Disable logistic leakage head even if enabled in config.",
     )
+    parser.add_argument(
+        "--baseline-backend",
+        choices=("diagnostic", "pykt"),
+        default=None,
+        help="diagnostic: linear ensembles (default). pykt: torch/pyKT for DKT/AKT/GKT/simpleKT + classical BKT EM.",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level.upper()))
     random.seed(args.seed)
@@ -644,6 +831,8 @@ def main() -> None:
     ratios = tuple(split_cfg.get("ratios", [0.7, 0.1, 0.2]))
     n_bootstrap = int(cfg.get("evaluation", {}).get("n_bootstrap", cfg.get("baselines_n_bootstrap", 1000)))
     models = _enabled_models(cfg)
+    backend = _evaluation_backend(cfg, args)
+    logger.info("baseline_runner backend=%s dataset=%s", backend, dataset)
 
     graph_ablation_cfg = cfg.get("graph_ablation", {})
     ablation_enabled = graph_ablation_cfg.get("enabled", True)
@@ -654,7 +843,8 @@ def main() -> None:
         trained_head_cfg["enabled"] = False
     full_log_ready = _full_log_graph_paths(dataset)[0].exists()
     ablation_models = [m for m in graph_ablation_cfg.get("models", ["gkt", "gikt", "skt", "dygkt", "dgekt"]) if m in MODEL_WEIGHTS]
-    pred_cap = 5000 if args.skip_cold_start else None
+    effective_skip_cold = bool(args.skip_cold_start) or backend == "pykt"
+    pred_cap = 5000 if effective_skip_cold else None
 
     fold_seed_list = fold_seeds(split_cfg, default_seed=args.seed)
     n_plan_folds = len(fold_seed_list)
@@ -678,20 +868,23 @@ def main() -> None:
                 fold,
                 model,
             )
-            result, predictions = _run_named_model(
-                model,
-                splits,
+            result, predictions = _run_backend_fold(
+                cfg,
+                args,
+                model=model,
+                splits=splits,
                 dataset=dataset,
                 fold=fold,
                 split_seed=split_seed,
                 graph_construction="train_only",
                 prediction_cap=pred_cap,
-                full_interactions=df,
                 trained_head_cfg=trained_head_cfg,
                 experiment_seed=args.seed,
+                backend=backend,
+                full_df=df,
             )
             rows.append(result)
-            if not args.skip_cold_start:
+            if not effective_skip_cold:
                 cold = _cold_start_rows(dataset, fold, split_seed, splits["train"], predictions, strata=strata_once)
                 if not cold.empty:
                     cold_frames.append(cold)
@@ -710,17 +903,20 @@ def main() -> None:
                     fold,
                     model,
                 )
-                result, _predictions = _run_named_model(
-                    model,
-                    splits,
+                result, _predictions = _run_backend_fold(
+                    cfg,
+                    args,
+                    model=model,
+                    splits=splits,
                     dataset=dataset,
                     fold=fold,
                     split_seed=split_seed,
                     graph_construction="full_log",
                     prediction_cap=pred_cap,
-                    full_interactions=df,
                     trained_head_cfg=trained_head_cfg,
                     experiment_seed=args.seed,
+                    backend=backend,
+                    full_df=df,
                 )
                 rows.append(result)
         elif ablation_enabled and not full_log_ready and fold == 0:
@@ -737,11 +933,11 @@ def main() -> None:
     ab_summary = _summarize_graph_ablation(fold_results)
     if not ab_summary.empty:
         _merge_csv(Path("results/tables/graph_ablation_summary.csv"), ab_summary, dataset)
-    if not args.skip_cold_start:
+    if not effective_skip_cold:
         cold_rows = pd.concat(cold_frames, ignore_index=True) if cold_frames else pd.DataFrame()
         _merge_csv(Path("results/tables/cold_start_metrics.csv"), cold_rows, dataset)
     else:
-        logger.info("Cold-start CSV merge skipped (--skip-cold-start)")
+        logger.info("Cold-start CSV merge skipped (--skip-cold-start or baseline_backend=pykt)")
     predictions_sample = pd.concat(prediction_samples, ignore_index=True)
     dump_csv(predictions_sample, Path("results/predictions") / f"{dataset}_diagnostic_predictions_sample.csv")
 
