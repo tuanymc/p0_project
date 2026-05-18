@@ -21,7 +21,7 @@ Graph Construction and Cold-Start Diagnostic Protocol for Knowledge Tracing*
 1. [Quick start](#1-quick-start)
 2. [Environment setup](#2-environment-setup)
 3. [Data download and preparation](#3-data-download-and-preparation)
-4. [Running experiments](#4-running-experiments)
+4. [Running experiments](#4-running-experiments) ([step-by-step](#40-step-by-step-experiment-guide))
 5. [Per-stage commands](#5-per-stage-commands) ([graph_builder API](#51-graph_builder-python-api))
 6. [Outputs and where they live](#6-outputs-and-where-they-live)
 7. [Paper artefacts and LaTeX paths](#7-paper-artefacts-and-latex-paths)
@@ -50,7 +50,9 @@ bash scripts/run_junyi_minimal.sh
 
 If you do not have Git Bash/WSL, run the same stages by hand (see
 [§5](#5-per-stage-commands)); or use `scripts/run_all_datasets_full.ps1` for
-everything including paper tables (see [§4](#4-running-experiments)).
+everything including paper tables (see [§4](#4-running-experiments)). For a
+**numbered walkthrough** of setup and experiment tracks, start at
+[§4.0](#40-step-by-step-experiment-guide).
 
 **Runtime.** Roughly tens of minutes on a laptop CPU for Junyi end-to-end if
 deep baselines (`torch`) are enabled; longer for full three-dataset runs and
@@ -87,6 +89,20 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+**Optional pyKT backend.** If you plan to run `baseline_runner` with real PyTorch / `pykt-toolkit` training (`evaluation.baseline_backend: pykt` in YAML or `--baseline-backend pykt`), clone **with submodules** or run:
+
+```bash
+git submodule update --init --recursive
+```
+
+Then install extras:
+
+```bash
+pip install -e ".[pykt]"
+```
+
+(`pykt-toolkit` is pinned via `third_party/pykt-toolkit`; see `third_party/README.md`.)
+
 ### 2.3 Tests
 
 From the repository root:
@@ -97,9 +113,11 @@ pytest -q
 
 ### 2.4 GPU (optional)
 
-`torch` is required for DKT / simpleKT / AKT / GKT / GIKT style baselines.
-CPU is acceptable for structural stages only. Install a CUDA build of
-PyTorch that matches your stack if needed:
+Structural stages (`preprocess` → `graph_builder` → `dag_*`) use NumPy/pandas only.
+
+PyTorch / CUDA matters only when you install **`pip install -e ".[pykt]"`** and run
+`baseline_runner` with **`evaluation.baseline_backend: pykt`** (or `--baseline-backend pykt`).
+Install a CUDA build that matches your driver when appropriate:
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cu121
@@ -166,6 +184,97 @@ Stop and fix any learner overlap or temporal violations before continuing.
 Use this section to reproduce paper-facing numbers and optional ablations.
 Always run commands from the **repository root** with the venv that has
 `pip install -e .` applied.
+
+### 4.0 Step-by-step experiment guide
+
+Follow **A → B** once per machine; then choose **one track** under **C**. Commands below use `configs/junyi.yaml` as an example; swap for `configs/assist2012.yaml` or `configs/xes3g5m.yaml` when working on other benchmarks.
+
+#### A. First-time setup
+
+1. **Clone** this repository. For the optional **pyKT** neural backend, fetch the pinned submodule:
+   ```bash
+   git submodule update --init --recursive
+   ```
+2. **Create and activate** a virtual environment ([§2.1](#21-virtual-environment)).
+3. **Install core dependencies:**
+   ```bash
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   pip install -e .
+   ```
+4. **(Optional)** Install PyTorch + submodule-backed **`pykt-toolkit`** for `--baseline-backend pykt` / `evaluation.baseline_backend: pykt`:
+   ```bash
+   pip install -e ".[pykt]"
+   ```
+   Default YAML in this repo keeps **`diagnostic`** ensembles unless you change `evaluation.baseline_backend` or pass `--baseline-backend pykt` to `baseline_runner`.
+5. **Sanity check:** `pytest -q` ([§2.3](#23-tests)).
+
+#### B. Data preparation (per benchmark)
+
+6. **Place raw files** under `data/raw/<dataset>/` as required by each YAML ([§3.1](#31-layout)).
+7. **Preprocess** to canonical parquet (repeat for each dataset you need):
+   ```bash
+   python -m src.preprocess --config configs/junyi.yaml
+   ```
+8. **Split audit** — fix any failures before graphs or baselines:
+   ```bash
+   python -m src.split_checker --config configs/junyi.yaml
+   ```
+
+#### C. Choose an experiment track
+
+**Track 1 — Smoke / one dataset (Junyi)**  
+9. After **A** and **B** for Junyi, run the bundled minimal pipeline:
+   ```bash
+   bash scripts/run_junyi_minimal.sh
+   ```
+   On **Windows** without Git Bash:
+   ```powershell
+   $env:PYTHON = "python"   # optional
+   bash scripts/run_junyi_minimal.sh
+   ```
+   If Bash is unavailable, run the same stages manually in [§5](#5-per-stage-commands).
+
+**Track 2 — Full protocol (all three benchmarks, paper-scale)**  
+10. Ensure raw inputs exist for **Junyi, ASSISTments 2012, and XES3G5M**.  
+11. Run the orchestrator (RAM/thread notes in [§4.2](#42-full-pipeline-all-benchmarks)):
+    ```bash
+    chmod +x scripts/run_all_datasets_full.sh
+    ./scripts/run_all_datasets_full.sh --server
+    ```
+    ```powershell
+    .\scripts\run_all_datasets_full.ps1 -ServerProfile
+    ```
+12. **Post-process artefacts:** tables TeX + aggregated report:
+    ```bash
+    python scripts/generate_paper_artifacts.py
+    python -m src.report_generator --out results/reports/
+    ```
+
+**Track 3 — Graph ablation H1 (train-only vs full-log diagnostics)**  
+13. Requires parquet for each dataset you include (preprocess or Track 2 preprocess stage).  
+14. Run (details and flags: [`scripts/GRAPH_ABLATION_EXPERIMENT.md`](scripts/GRAPH_ABLATION_EXPERIMENT.md)):
+    ```bash
+    chmod +x scripts/run_graph_ablation_experiment.sh
+    SERVER_PROFILE=1 ./scripts/run_graph_ablation_experiment.sh
+    ```
+    ```powershell
+    .\scripts\run_graph_ablation_experiment.ps1 -ServerProfile
+    ```
+15. Refresh paper snippets: `python scripts/generate_paper_artifacts.py`.
+
+**Track 4 — Junyi ground-truth cross-validation**  
+16. Requires preprocess + graph stages so `data/processed/junyi/kc_name_to_id.json` exists.  
+17. Run:
+    ```bash
+    python scripts/run_gt_cross_validation_junyi.py
+    ```
+
+**Track 5 — Regenerate figures / TeX only**  
+18. DDR line figures (after `dag_disruption` CSVs exist): `bash scripts/make_all_figures.sh`.  
+19. Paper `\input{...}` tables from existing CSVs: `python scripts/generate_paper_artifacts.py`.
+
+For **manual stage-by-stage** control on a single config (debugging), use the ordered CLI list in [§5](#5-per-stage-commands).
 
 ### 4.1 Experiment map
 
@@ -393,6 +502,9 @@ for each dataset, or `bash scripts/make_all_figures.sh`.
 **Baseline RAM / time** — Reduce folds in YAML (`split.n_folds`) or disable
 heavy models in `configs/*.yaml` under `baselines:` while debugging structure-only stages.
 
+**`baseline_backend=pykt` import errors** — Run `git submodule update --init --recursive`
+and `pip install -e ".[pykt]"` from the repo root (see [§2.2](#22-dependencies)).
+
 **Junyi baseline RAM (Linux/macOS full pipeline)** — `scripts/run_all_datasets_full.sh` invokes `baseline_runner` without `--skip-cold-start`; Windows `run_all_datasets_full.ps1` adds `--skip-cold-start` for Junyi.
 If you hit OOM on Bash/WSL, rerun only that stage:
 `python -m src.baseline_runner --config configs/junyi.yaml --skip-cold-start`.
@@ -428,6 +540,9 @@ p0_project/
 │   ├── gt_cross_validation.py
 │   ├── report_generator.py
 │   └── io_utils.py
+├── third_party/
+│   ├── README.md
+│   └── pykt-toolkit/          # git submodule (optional pyKT backend)
 ├── scripts/
 │   ├── run_junyi_minimal.sh
 │   ├── run_assist_minimal.sh
