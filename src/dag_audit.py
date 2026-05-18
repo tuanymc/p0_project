@@ -151,12 +151,16 @@ def main() -> None:
     pruning_logs = []
     for fold, edges_path in fold_edges:
         edges = pd.read_csv(edges_path) if edges_path.exists() else pd.DataFrame(columns=["src_kc", "dst_kc", "weight"])
+        n_edges_raw = int(len(edges))
         report = audit_dag(edges)
+        n_pruned = max(0, n_edges_raw - report.n_edges)
         lines.extend([
             f"## Fold {fold}",
             f"- source_edges: `{edges_path}`",
             f"- nodes: {report.n_nodes}",
-            f"- edges: {report.n_edges}",
+            f"- edges_raw: {n_edges_raw}",
+            f"- edges_final: {report.n_edges}",
+            f"- edges_pruned: {n_pruned}",
             f"- cycles_before: {report.n_cycles_before}",
             f"- cycles_after: {report.n_cycles_after}",
             f"- topo_sort_passed: {report.topo_sort_passed}",
@@ -166,6 +170,8 @@ def main() -> None:
             "dataset": dataset,
             "fold": fold,
             "n_nodes": report.n_nodes,
+            "n_edges_raw": n_edges_raw,
+            "n_edges_pruned": n_pruned,
             "n_edges": report.n_edges,
             "n_roots": report.n_roots,
             "n_leaves": report.n_leaves,

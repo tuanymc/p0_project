@@ -2,21 +2,14 @@
 \centering
 \caption{DAG audit summary (fold~0). \emph{Raw} and \emph{Final} are
 the prerequisite edge counts before and after lowest-confidence cycle
-pruning; \emph{Pruned} is the difference. The \emph{Cycles} column is
-reported with the protocol's top-$100$ cycle-detection cap. All three
-datasets yield zero cycles after pruning and pass topological sort.}
+pruning inside \texttt{dag\_audit}; \emph{Pruned} is the difference.
+The \emph{Cycles} column reports representative cycles found before pruning
+(cap~$100$). All corpora pass topological sort with zero cycles after pruning on fold~0.}
 \label{tab:dag-audit}
 \footnotesize
 \setlength{\tabcolsep}{2pt}
 \renewcommand{\arraystretch}{1.05}
-\begin{tabular}{@{}
-  >{\RaggedRight\arraybackslash}p{11mm}
-  r
-  >{\centering\arraybackslash}p{16mm}
-  r
-  >{\centering\arraybackslash}p{16mm}
-  r r r
-@{}}
+\begin{tabular}{@{} >{\RaggedRight\arraybackslash}p{17mm} r >{\centering\arraybackslash}p{14mm} r >{\centering\arraybackslash}p{14mm} r r r @{}}
 \toprule
 \makecell[l]{Dataset}
   & $|V|$
@@ -27,9 +20,11 @@ datasets yield zero cycles after pruning and pass topological sort.}
   & Leaves
   & \makecell{Cycles\\(cap)} \\
 \midrule
-Junyi      & 573 & 2{,}152 & 1{,}013 & 1{,}139 &  90 &  92 & $\geq\!100$ \\
-ASSIST'12  & 139 &     413 &     152 &     261 &  34 &  23 & $\geq\!100$ \\
-XES3G5M    & 455 & 1{,}162 &     461 &     701 & 129 &  73 & $\geq\!100$ \\
+\makecell[l]{Junyi\\Academy} & 573 & 2{,}152 & 1{,}013 & 1{,}139 & 90 & 92 & $\geq\!100$ \\
+ASSIST'12 & 108 & 386 & 147 & 239 & 37 & 16 & $\geq\!100$ \\
+XES3G5M & 455 & 1{,}162 & 461 & 701 & 129 & 73 & $\geq\!100$ \\
+Synthetic C2 & 2 & 2 & 1 & 1 & 1 & 1 & 1 \\
+Synthetic C5 & 3 & 2 & 0 & 2 & 1 & 1 & 0 \\
 \bottomrule
 \end{tabular}
 \end{table}

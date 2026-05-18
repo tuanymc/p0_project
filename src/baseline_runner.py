@@ -11,6 +11,13 @@ scored using **train-fold** outcomes only; for ``"full_log"``, edge lists come f
 ``full_log/e_pre.csv`` (etc.) and neighbour scores use **pooled** correctness over the
 entire preprocessed interaction table so the ablation reflects both topology and
 statistics from the full log, not topology alone.
+
+Optional ``graph_ablation.trained_leakage_head`` replaces the fixed diagnostic weights for
+graph-augmented models with a **logistic regression head** fit by mini-batch gradient descent
+**only on the train fold** (labels and identity users/items unchanged). The global/KC/item/user/freq
+channels still come from train-fold statistics; only the graph channel (and its backing pooling)
+differs between ``train_only`` and ``full_log``. That makes leakage easier to surface than with a
+frozen blend because coefficients can up-weight the leaked graph signal.
 """
 
 from __future__ import annotations
@@ -41,6 +48,149 @@ MODEL_WEIGHTS = {
     "dygkt": {"global": 0.10, "kc": 0.33, "user": 0.22, "item": 0.05, "graph": 0.30},  # dynamic: user + graph
     "dgekt": {"global": 0.08, "kc": 0.30, "item": 0.27, "graph": 0.35},  # dual-view: item + graph
 }
+
+# Stable channel order for stacking trainable leakage-head features (subset per model).
+_DIAGNOSTIC_FEATURE_ORDER = ("global", "kc", "item", "user", "graph", "freq")
+
+
+def _feature_keys_for_model(name: str) -> tuple[str, ...]:
+    w = MODEL_WEIGHTS[name]
+    return tuple(k for k in _DIAGNOSTIC_FEATURE_ORDER if k in w)
+
+
+def _sigmoid_np(z: np.ndarray) -> np.ndarray:
+    z = np.clip(np.asarray(z, dtype=np.float64), -50.0, 50.0)
+    return np.clip(1.0 / (1.0 + np.exp(-z)), 1e-9, 1.0 - 1e-9)
+
+
+def _diagnostic_feature_arrays(
+    train: pd.DataFrame,
+    df: pd.DataFrame,
+    dataset: str,
+    fold: int,
+    *,
+    graph_construction: str,
+    full_interactions: pd.DataFrame | None,
+    graph_rates: dict[int, float] | None = None,
+) -> dict[str, np.ndarray]:
+    """Same semantic channels as ``_predict_with_weights``, as dense arrays for ``df`` rows."""
+    kc_rates, global_rate = _rate_map(train, "kc_id")
+    item_rates, _ = _rate_map(train, "item_id")
+    user_rates, _ = _rate_map(train, "user_id")
+    if graph_rates is None:
+        neighbor_df = full_interactions if graph_construction == "full_log" else train
+        graph_rates = _graph_kc_rates(
+            train,
+            dataset,
+            global_rate,
+            fold=fold,
+            graph_construction=graph_construction,
+            neighbor_stats_df=neighbor_df,
+        )
+
+    kc_counts = train.groupby("kc_id").size()
+    max_count = max(1, int(kc_counts.max())) if not kc_counts.empty else 1
+
+    gr_series = df["kc_id"].map(graph_rates)
+    graph_col = gr_series.fillna(global_rate).to_numpy(dtype=np.float64)
+    freq_score = df["kc_id"].map(kc_counts).fillna(0).to_numpy(dtype=np.float64) / max_count
+    n = len(df)
+    return {
+        "global": np.full(n, global_rate, dtype=np.float64),
+        "kc": df["kc_id"].map(kc_rates).fillna(global_rate).to_numpy(dtype=np.float64),
+        "item": df["item_id"].map(item_rates).fillna(global_rate).to_numpy(dtype=np.float64),
+        "user": df["user_id"].map(user_rates).fillna(global_rate).to_numpy(dtype=np.float64),
+        "graph": graph_col,
+        "freq": 0.5 * global_rate + 0.5 * freq_score,
+    }
+
+
+def _stack_features(feature_arrays: dict[str, np.ndarray], keys: tuple[str, ...]) -> np.ndarray:
+    return np.column_stack([feature_arrays[k] for k in keys])
+
+
+def _fit_leakage_head_streaming(
+    train_df: pd.DataFrame,
+    dataset: str,
+    fold: int,
+    *,
+    graph_construction: str,
+    full_interactions: pd.DataFrame | None,
+    keys: tuple[str, ...],
+    graph_rates: dict[int, float],
+    epochs: int,
+    batch_size: int,
+    lr: float,
+    l2: float,
+    seed: int,
+) -> tuple[np.ndarray, float]:
+    """Mini-batch logistic regression on train-fold rows only (memory-friendly)."""
+    rng = np.random.default_rng(seed)
+    n = len(train_df)
+    d = len(keys)
+    w = rng.normal(0.0, 0.02, size=d)
+    b = 0.0
+    y_all = train_df["correct"].to_numpy(dtype=np.float64)
+    idx_all = np.arange(n)
+    bs = max(1, int(batch_size))
+
+    for _ in range(max(1, int(epochs))):
+        rng.shuffle(idx_all)
+        for start in range(0, n, bs):
+            batch_idx = idx_all[start : start + bs]
+            batch_df = train_df.iloc[batch_idx]
+            feats = _diagnostic_feature_arrays(
+                train_df,
+                batch_df,
+                dataset,
+                fold,
+                graph_construction=graph_construction,
+                full_interactions=full_interactions,
+                graph_rates=graph_rates,
+            )
+            Xb = _stack_features(feats, keys)
+            yb = y_all[batch_idx]
+            p = _sigmoid_np(Xb @ w + b)
+            err = p - yb
+            scale = 1.0 / max(1, len(batch_idx))
+            gw = scale * (Xb.T @ err) + l2 * w
+            gb = float(np.mean(err))
+            w = w - lr * gw
+            b = b - lr * gb
+
+    return w, b
+
+
+def _predict_leakage_head(
+    train: pd.DataFrame,
+    eval_df: pd.DataFrame,
+    dataset: str,
+    fold: int,
+    *,
+    graph_construction: str,
+    full_interactions: pd.DataFrame | None,
+    keys: tuple[str, ...],
+    graph_rates: dict[int, float],
+    w: np.ndarray,
+    b: float,
+    chunk_rows: int = 500_000,
+) -> np.ndarray:
+    out = np.zeros(len(eval_df), dtype=np.float64)
+    for start in range(0, len(eval_df), max(1, int(chunk_rows))):
+        sl = slice(start, min(start + chunk_rows, len(eval_df)))
+        part = eval_df.iloc[sl]
+        feats = _diagnostic_feature_arrays(
+            train,
+            part,
+            dataset,
+            fold,
+            graph_construction=graph_construction,
+            full_interactions=full_interactions,
+            graph_rates=graph_rates,
+        )
+        X = _stack_features(feats, keys)
+        out[sl] = _sigmoid_np(X @ w + b)
+    return out
 
 
 def _clip_prob(values: pd.Series | np.ndarray) -> np.ndarray:
@@ -203,19 +353,82 @@ def _run_named_model(
     graph_construction: str = "train_only",
     prediction_cap: int | None = None,
     full_interactions: pd.DataFrame | None = None,
+    trained_head_cfg: dict | None = None,
+    experiment_seed: int = 42,
 ) -> tuple[dict, pd.DataFrame]:
     train = splits["train"]
     eval_df = pd.concat([splits["valid"], splits["test"]], ignore_index=True)
     weights = MODEL_WEIGHTS[name]
-    y_prob = _predict_with_weights(
-        train,
-        eval_df,
-        dataset,
-        weights,
-        fold=fold,
-        graph_construction=graph_construction,
-        full_interactions=full_interactions,
-    )
+    th = trained_head_cfg or {}
+    use_trained_head = bool(th.get("enabled")) and "graph" in weights
+
+    if use_trained_head:
+        keys = _feature_keys_for_model(name)
+        _, global_rate = _rate_map(train, "kc_id")
+        neighbor_df = full_interactions if graph_construction == "full_log" else train
+        graph_rates = _graph_kc_rates(
+            train,
+            dataset,
+            global_rate,
+            fold=fold,
+            graph_construction=graph_construction,
+            neighbor_stats_df=neighbor_df,
+        )
+        fit_seed = int(experiment_seed) + int(fold) * 1_000_003 + (31 if graph_construction == "full_log" else 0)
+        w_vec, b_vec = _fit_leakage_head_streaming(
+            train,
+            dataset,
+            fold,
+            graph_construction=graph_construction,
+            full_interactions=full_interactions,
+            keys=keys,
+            graph_rates=graph_rates,
+            epochs=int(th.get("epochs", 12)),
+            batch_size=int(th.get("batch_size", 8192)),
+            lr=float(th.get("lr", 0.35)),
+            l2=float(th.get("l2", 1e-4)),
+            seed=fit_seed,
+        )
+        y_prob = _predict_leakage_head(
+            train,
+            eval_df,
+            dataset,
+            fold,
+            graph_construction=graph_construction,
+            full_interactions=full_interactions,
+            keys=keys,
+            graph_rates=graph_rates,
+            w=w_vec,
+            b=b_vec,
+        )
+        y_prob = _clip_prob(y_prob)
+        status = "trained_leakage_head"
+        note = (
+            "Logistic regression on diagnostic channels fit on train fold only; "
+            "graph signal differs by construction (train-only vs full-log pooling)."
+        )
+        logger.info(
+            "Trained leakage head model=%s dataset=%s fold=%s construction=%s channels=%s epochs=%s",
+            name,
+            dataset,
+            fold,
+            graph_construction,
+            ",".join(keys),
+            int(th.get("epochs", 12)),
+        )
+    else:
+        y_prob = _predict_with_weights(
+            train,
+            eval_df,
+            dataset,
+            weights,
+            fold=fold,
+            graph_construction=graph_construction,
+            full_interactions=full_interactions,
+        )
+        status = "diagnostic"
+        note = "Diagnostic baseline; no SOTA claim."
+
     result = {
         "dataset": dataset,
         "fold": fold,
@@ -225,8 +438,8 @@ def _run_named_model(
         "eval_split": "valid+test",
         **_metrics(eval_df["correct"], y_prob),
         "n_eval": len(eval_df),
-        "status": "diagnostic",
-        "note": "Diagnostic baseline; no SOTA claim.",
+        "status": status,
+        "note": note,
     }
     cap = len(eval_df) if prediction_cap is None else min(int(prediction_cap), len(eval_df))
     tail = eval_df.iloc[:cap]
@@ -351,8 +564,12 @@ def _summarize_fold_results(fold_results: pd.DataFrame, seed: int, n_bootstrap: 
             "eval_split": "valid+test",
             "n_folds": int(part["fold"].nunique()),
             "n_eval": int(part["n_eval"].sum()),
-            "status": "diagnostic",
-            "note": "Diagnostic baseline; mean over folds with bootstrap CI.",
+            "status": str(part["status"].iloc[0]) if "status" in part.columns else "diagnostic",
+            "note": (
+                str(part["note"].iloc[0])
+                if "note" in part.columns
+                else "Diagnostic baseline; mean over folds with bootstrap CI."
+            ),
         }
         for metric in ["auc", "acc", "nll"]:
             row[metric] = float(part[metric].mean())
@@ -406,6 +623,16 @@ def main() -> None:
         action="store_true",
         help="Skip per-stratum cold-start metrics (saves RAM on very large val+test folds).",
     )
+    parser.add_argument(
+        "--ablation-trained-head",
+        action="store_true",
+        help="Fit logistic leakage head for graph baselines (overrides graph_ablation.trained_leakage_head.enabled).",
+    )
+    parser.add_argument(
+        "--no-ablation-trained-head",
+        action="store_true",
+        help="Disable logistic leakage head even if enabled in config.",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level.upper()))
     random.seed(args.seed)
@@ -420,6 +647,11 @@ def main() -> None:
 
     graph_ablation_cfg = cfg.get("graph_ablation", {})
     ablation_enabled = graph_ablation_cfg.get("enabled", True)
+    trained_head_cfg: dict = dict(graph_ablation_cfg.get("trained_leakage_head", {}))
+    if args.ablation_trained_head:
+        trained_head_cfg["enabled"] = True
+    if args.no_ablation_trained_head:
+        trained_head_cfg["enabled"] = False
     full_log_ready = _full_log_graph_paths(dataset)[0].exists()
     ablation_models = [m for m in graph_ablation_cfg.get("models", ["gkt", "gikt", "skt", "dygkt", "dgekt"]) if m in MODEL_WEIGHTS]
     pred_cap = 5000 if args.skip_cold_start else None
@@ -455,6 +687,8 @@ def main() -> None:
                 graph_construction="train_only",
                 prediction_cap=pred_cap,
                 full_interactions=df,
+                trained_head_cfg=trained_head_cfg,
+                experiment_seed=args.seed,
             )
             rows.append(result)
             if not args.skip_cold_start:
@@ -485,6 +719,8 @@ def main() -> None:
                     graph_construction="full_log",
                     prediction_cap=pred_cap,
                     full_interactions=df,
+                    trained_head_cfg=trained_head_cfg,
+                    experiment_seed=args.seed,
                 )
                 rows.append(result)
         elif ablation_enabled and not full_log_ready and fold == 0:

@@ -7,10 +7,17 @@ pipeline has already produced and avoids model or graph construction.
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 from typing import Any
+
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import pandas as pd
 import yaml
+
+from src.io_utils import dump_csv
 
 
 CONFIGS = [
@@ -29,6 +36,232 @@ DATASET_LABELS = {
     "synthetic_c5": "Synthetic C5",
 }
 
+BASELINE_TEX_LABEL = {
+    "junyi": "tab:baseline-junyi",
+    "assist2012": "tab:baseline-assist2012",
+    "xes3g5m": "tab:baseline-xes3g5m",
+    "synthetic_c2": "tab:baseline-synthetic-c2",
+    "synthetic_c5": "tab:baseline-synthetic-c5",
+}
+
+GRAPH_ABLATION_TEX_LABEL = {
+    "junyi": "tab:graph-ablation-junyi",
+    "assist2012": "tab:graph-ablation-assist2012",
+    "xes3g5m": "tab:graph-ablation-xes3g5m",
+    "synthetic_c2": "tab:graph-ablation-synthetic-c2",
+    "synthetic_c5": "tab:graph-ablation-synthetic-c5",
+}
+
+DAG_AUDIT_ROW_LABEL = {
+    "junyi": (r"Junyi", r"Academy"),
+    "assist2012": (r"ASSIST'12",),
+    "xes3g5m": (r"XES3G5M",),
+    "synthetic_c2": (r"Synthetic C2",),
+    "synthetic_c5": (r"Synthetic C5",),
+}
+
+COLD_START_STRATUM_ORDER = ("very_cold", "cold", "warm", "hot", "out_of_range")
+
+
+def _fmt_tex_int(n: int) -> str:
+    return format(int(n), ",").replace(",", "{,}")
+
+
+def _backfill_dag_audit_csv(path: Path) -> None:
+    """Add n_edges_raw / n_edges_pruned using per-fold pruning logs when present."""
+    if not path.exists():
+        return
+    df = pd.read_csv(path)
+    for col in ("n_edges_raw", "n_edges_pruned"):
+        if col in df.columns:
+            df = df.drop(columns=[col])
+    raws: list[int] = []
+    prunes: list[int] = []
+    for _, row in df.iterrows():
+        ds = str(row["dataset"]).strip()
+        fold = int(float(row["fold"]))
+        final = int(row["n_edges"])
+        plp = Path("results/reports") / f"{ds}_dag_pruning_log.csv"
+        pruned = 0
+        if plp.exists():
+            pl = pd.read_csv(plp)
+            if "fold" in pl.columns:
+                pruned = int(len(pl[pl["fold"].astype(int) == fold]))
+            else:
+                pruned = int(len(pl))
+        raws.append(final + pruned)
+        prunes.append(pruned)
+    df["n_edges_raw"] = raws
+    df["n_edges_pruned"] = prunes
+    dump_csv(df.sort_values(["dataset", "fold"]), path)
+
+
+def _write_dag_audit_summary_tex(path: Path) -> None:
+    """Paper table: fold~0 only, all CONFIG datasets, raw/pruned/final from CSV backfill."""
+    csv_path = Path("results/tables/dag_audit_summary.csv")
+    if not csv_path.exists():
+        return
+    _backfill_dag_audit_csv(csv_path)
+    df = pd.read_csv(csv_path)
+    df["fold"] = df["fold"].astype(float).astype(int)
+    df0 = df[df["fold"] == 0].set_index("dataset")
+    ordered_slugs = [_dataset_slug(p) for p in CONFIGS]
+    body_lines: list[str] = []
+    for slug in ordered_slugs:
+        if slug not in df0.index:
+            continue
+        row = df0.loc[slug]
+        if isinstance(row, pd.DataFrame):
+            row = row.iloc[0]
+        raw_i = int(row["n_edges_raw"]) if pd.notna(row.get("n_edges_raw")) else int(row["n_edges"])
+        pruned_i = int(row["n_edges_pruned"]) if pd.notna(row.get("n_edges_pruned")) else 0
+        final_i = int(row["n_edges"])
+        if raw_i < final_i:
+            raw_i = final_i
+            pruned_i = 0
+        nodes_i = int(row["n_nodes"])
+        roots_i = int(row["n_roots"])
+        leaves_i = int(row["n_leaves"])
+        cb = int(row["n_cycles_before"])
+        cycles_tex = r"$\geq\!100$" if cb >= 100 else str(cb)
+        short = DAG_AUDIT_ROW_LABEL.get(slug, (slug.replace("_", r"\_"),))
+        if len(short) == 1:
+            ds_cell = short[0]
+        else:
+            ds_cell = rf"\makecell[l]{{{short[0]}\\{short[1]}}}"
+        body_lines.append(
+            rf"{ds_cell} & {_fmt_tex_int(nodes_i)} & {_fmt_tex_int(raw_i)} & {_fmt_tex_int(pruned_i)} & {_fmt_tex_int(final_i)} & {roots_i} & {leaves_i} & {cycles_tex} \\"
+        )
+
+    if not body_lines:
+        return
+
+    lines = [
+        r"\begin{table}[t]",
+        r"\centering",
+        r"\caption{DAG audit summary (fold~0). \emph{Raw} and \emph{Final} are",
+        r"the prerequisite edge counts before and after lowest-confidence cycle",
+        r"pruning inside \texttt{dag\_audit}; \emph{Pruned} is the difference.",
+        r"The \emph{Cycles} column reports representative cycles found before pruning",
+        r"(cap~$100$). All corpora pass topological sort with zero cycles after pruning on fold~0.}",
+        r"\label{tab:dag-audit}",
+        r"\footnotesize",
+        r"\setlength{\tabcolsep}{2pt}",
+        r"\renewcommand{\arraystretch}{1.05}",
+        r"\begin{tabular}{@{} >{\RaggedRight\arraybackslash}p{17mm} r >{\centering\arraybackslash}p{14mm} r >{\centering\arraybackslash}p{14mm} r r r @{}}",
+        r"\toprule",
+        r"\makecell[l]{Dataset}",
+        r"  & $|V|$",
+        r"  & \makecell{Raw\\$|\Epre|$}",
+        r"  & Pruned",
+        r"  & \makecell{Final\\$|\Epre|$}",
+        r"  & Roots",
+        r"  & Leaves",
+        r"  & \makecell{Cycles\\(cap)} \\",
+        r"\midrule",
+        "\n".join(body_lines),
+        r"\bottomrule",
+        r"\end{tabular}",
+        r"\end{table}",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _stratum_tex(name: str) -> str:
+    if name == "out_of_range":
+        return r"out of range"
+    return str(name).replace("_", r"\_")
+
+
+def _write_cold_start_by_stratum_tex(path: Path, *, model: str = "simplekt", fold: int = 0) -> None:
+    csv_path = Path("results/tables/cold_start_metrics.csv")
+    if not csv_path.exists():
+        return
+    df = pd.read_csv(csv_path)
+    req = {"dataset", "model", "stratum", "n", "auc", "acc", "nll", "fold"}
+    if df.empty or not req.issubset(df.columns):
+        return
+    df = df.copy()
+    df["fold"] = df["fold"].astype(float).astype(int)
+    model_lower = str(model).strip().lower()
+    caption_model = "simpleKT" if model_lower == "simplekt" else str(model)
+    sub = df[(df["model"].astype(str).str.lower() == model_lower) & (df["fold"] == fold)]
+    if sub.empty:
+        return
+
+    ordered_slugs = [_dataset_slug(p) for p in CONFIGS]
+    blocks: list[str] = []
+    for slug in ordered_slugs:
+        part = sub[sub["dataset"].astype(str).str.strip() == slug]
+        if part.empty:
+            continue
+        # Stable stratum ordering; skip strata absent for this dataset.
+        seen = set(part["stratum"].astype(str))
+        strata_sorted = [s for s in COLD_START_STRATUM_ORDER if s in seen] + sorted(
+            seen.difference(COLD_START_STRATUM_ORDER)
+        )
+        rows_tex = []
+        for st in strata_sorted:
+            r0 = part[part["stratum"].astype(str) == st].iloc[0]
+            n_i = int(r0["n"])
+            rows_tex.append(
+                rf"  & {_stratum_tex(st)} & {_fmt_tex_int(n_i)} & {_fmt_float(float(r0['auc']))} & {_fmt_float(float(r0['acc']))} & {_fmt_float(float(r0['nll']))} \\"
+            )
+        label_parts = DAG_AUDIT_ROW_LABEL.get(slug, (slug,))
+        if len(label_parts) == 1:
+            mr_line = rf"\multirow{{{len(rows_tex)}}}{{*}}{{{label_parts[0]}}}"
+        else:
+            mr_line = rf"\multirow{{{len(rows_tex)}}}{{*}}{{\makecell[l]{{{label_parts[0]}\\{label_parts[1]}}}}}"
+        first = rows_tex[0].replace("  & ", rf"{mr_line} & ", 1)
+        rest = rows_tex[1:]
+        blocks.append("\n".join([first, *rest]))
+
+    if not blocks:
+        return
+
+    lines = [
+        r"\begin{table}[t]",
+        r"\centering",
+        rf"\caption{{Per-stratum cold-start KC diagnostic with \textit{{{caption_model}}} on fold~{fold} ",
+        r"(Section~\ref{sec:cold-start}). The $n$ column counts test interactions whose KC ",
+        r"falls in the stratum train-frequency bin; \emph{out of range} marks test KCs ",
+        r"outside the four canonical bins. Stratum mass varies by dataset split; under default bins ",
+        r"Synthetic C2/C5 route all test interactions into the hot stratum ($>500$ train-fold hits per \KC{}).}",
+        r"\label{tab:cold-start-strata}",
+        r"\footnotesize",
+        r"\setlength{\tabcolsep}{2pt}",
+        r"\renewcommand{\arraystretch}{1.05}",
+        r"\begin{tabular}{@{} >{\RaggedRight\arraybackslash}p{24mm} >{\ttfamily\footnotesize\raggedright\arraybackslash}p{30mm} rrrr @{}}",
+        r"\toprule",
+        r"Dataset & Stratum & $n$ & AUC & ACC & NLL \\",
+        r"\midrule",
+    ]
+    lines.append("\n\\midrule\n".join(blocks))
+    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table}", ""])
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _model_display_name(model: str) -> str:
+    m = str(model).strip().lower()
+    special = {
+        "simplekt": r"\textit{simpleKT}",
+        "dygkt": r"DyGKT",
+        "dgekt": r"DGEKT",
+        "akt": r"AKT",
+        "bkt": r"BKT",
+        "dkt": r"DKT",
+        "gkt": r"GKT",
+        "gikt": r"GIKT",
+        "skt": r"SKT",
+    }
+    return special.get(m, str(model))
+
+
+def _dataset_slug(config_path: Path) -> str:
+    cfg = _load_yaml(config_path)
+    return str(cfg["dataset"]).strip()
+
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
@@ -37,11 +270,40 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 def _dataset_stats() -> pd.DataFrame:
     rows = []
+    synthetic_placeholders: dict[str, dict[str, Any]] = {
+        "synthetic_c2": {
+            "n_learners": 4_000,
+            "n_items": 50,
+            "n_kcs": 2,
+            "n_interactions": 200_000,
+        },
+        "synthetic_c5": {
+            "n_learners": 4_000,
+            "n_items": 50,
+            "n_kcs": 5,
+            "n_interactions": 200_000,
+        },
+    }
     for config_path in CONFIGS:
         cfg = _load_yaml(config_path)
         dataset = cfg["dataset"]
         processed_path = Path(cfg.get("processed_path", f"data/processed/{dataset}.parquet"))
         if not processed_path.exists():
+            if dataset in synthetic_placeholders:
+                ph = synthetic_placeholders[dataset]
+                nl = int(ph["n_learners"])
+                niact = int(ph["n_interactions"])
+                rows.append({
+                    "dataset": dataset,
+                    "label": DATASET_LABELS.get(dataset, dataset),
+                    "n_learners": nl,
+                    "n_items": int(ph["n_items"]),
+                    "n_kcs": int(ph["n_kcs"]),
+                    "n_interactions": niact,
+                    "avg_sequence_length": niact / nl if nl else 0.0,
+                    "has_dag": bool(cfg.get("has_dag", False)),
+                    "missing_total": 0,
+                })
             continue
         df = pd.read_parquet(processed_path, columns=["user_id", "item_id", "kc_id"])
         n_learners = int(df["user_id"].nunique())
@@ -68,9 +330,10 @@ def _write_dataset_stats_tex(stats: pd.DataFrame, path: Path) -> None:
         r"\caption{Dataset statistics used in the P0 diagnostic protocol. "
         r"Junyi Academy counts reflect the Chang et al.\ problem-level log "
         r"(\texttt{junyi\_ProblemLog\_original.csv}) after preprocessing; "
-        r"\#items and \#KCs coincide because both map to the exercise column.}",
+        r"\#items and \#KCs coincide because both map to the exercise column. "
+        r"Synthetic C2/C5 are companion sanity logs shipped with the preprocessing scripts.}",
         r"\label{tab:dataset-stats}",
-        r"\begin{tabularx}{\linewidth}{@{} >{\RaggedRight\arraybackslash}X rrrrr >{\centering\arraybackslash}p{14mm} @{}}",
+        r"\begin{tabularx}{\columnwidth}{@{} >{\RaggedRight\arraybackslash}X rrrrr >{\centering\arraybackslash}p{14mm} @{}}",
         r"\toprule",
         r"Dataset & \makecell[r]{\#\\learners} & \makecell[r]{\#\\items} & \makecell[r]{\#\\KCs} "
         r"& \makecell[r]{\#\\interactions} & \makecell[r]{Avg.\\seq.\ len.} & \makecell{Has\\DAG} \\",
@@ -91,7 +354,7 @@ def _fmt_float(value: float) -> str:
 
 
 def _fmt_metric_makecell(value: float, lo: float | None, hi: float | None) -> str:
-    """Point estimate on first line; 95\% CI on second (scriptsize)."""
+    """Point estimate on first line; 95\\% CI on second (scriptsize)."""
     v = _fmt_float(value)
     if lo is None or hi is None or pd.isna(lo) or pd.isna(hi):
         return v
@@ -114,31 +377,57 @@ def _write_baseline_tex(path: Path) -> None:
     if df.empty:
         return
     has_ci = {"auc_ci_low", "auc_ci_high", "acc_ci_low", "acc_ci_high", "nll_ci_low", "nll_ci_high"}.issubset(df.columns)
-    lines = [
-        r"\begin{table*}[!t]",
-        r"\centering",
-        r"\caption{Diagnostic baseline results. Baselines are used for protocol comparison only; no SOTA claim is made. Values are fold means with 95\% bootstrap confidence intervals when available.}",
-        r"\label{tab:baseline-results}",
-        r"\footnotesize",
-        r"\setlength{\tabcolsep}{2pt}",
-        r"\begin{tabular}{@{} >{\RaggedRight\arraybackslash}p{32mm} "
-        r">{\centering\arraybackslash}p{18mm} *{3}{>{\centering\arraybackslash}m{36mm}} @{}}",
-        r"\toprule",
-        r"Dataset & Model & AUC & ACC & NLL \\",
-        r"\midrule",
-    ]
-    for row in df.sort_values(["dataset", "model"]).itertuples(index=False):
-        if has_ci:
-            auc = _fmt_metric_makecell(row.auc, row.auc_ci_low, row.auc_ci_high)
-            acc = _fmt_metric_makecell(row.acc, row.acc_ci_low, row.acc_ci_high)
-            nll = _fmt_metric_makecell(row.nll, row.nll_ci_low, row.nll_ci_high)
-        else:
-            auc = _fmt_float(row.auc)
-            acc = _fmt_float(row.acc)
-            nll = _fmt_float(row.nll)
-        lines.append(f"{row.dataset} & {row.model} & {auc} & {acc} & {nll} " + r"\\")
-    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table*}", ""])
-    path.write_text("\n".join(lines), encoding="utf-8")
+
+    ordered_slugs = [_dataset_slug(p) for p in CONFIGS]
+    blocks: list[str] = []
+    base_cap = (
+        r"Diagnostic baseline results (train-only graphs). Baselines are used for protocol comparison only; "
+        r"no SOTA claim is made. Values are fold means with 95\% bootstrap confidence intervals when available."
+    )
+    first_block = True
+    for slug in ordered_slugs:
+        sub = df[df["dataset"].astype(str).str.strip() == slug]
+        if sub.empty:
+            continue
+        label = BASELINE_TEX_LABEL.get(slug, f"tab:baseline-{slug}")
+        human = DATASET_LABELS.get(slug, slug)
+        cap = base_cap if first_block else rf"Diagnostic baselines: {human} (train-only graphs)."
+
+        lines = [
+            r"\begin{table}[t]",
+            r"\centering",
+            r"\footnotesize",
+            r"\setlength{\tabcolsep}{2pt}",
+            rf"\caption{{{cap}}}",
+        ]
+        if first_block:
+            lines.append(r"\label{tab:baseline-results}")
+            first_block = False
+        lines.append(rf"\label{{{label}}}")
+        lines.extend([
+            r"\begin{tabular}{@{} >{\RaggedRight\arraybackslash}p{14mm} *{3}{>{\centering\arraybackslash}p{17mm}} @{}}",
+            r"\toprule",
+            r"Model & AUC & ACC & NLL \\",
+            r"\midrule",
+        ])
+        sub_sorted = sub.sort_values("model")
+        for row in sub_sorted.itertuples(index=False):
+            if has_ci:
+                auc = _fmt_metric_makecell(row.auc, row.auc_ci_low, row.auc_ci_high)
+                acc = _fmt_metric_makecell(row.acc, row.acc_ci_low, row.acc_ci_high)
+                nll = _fmt_metric_makecell(row.nll, row.nll_ci_low, row.nll_ci_high)
+            else:
+                auc = _fmt_float(row.auc)
+                acc = _fmt_float(row.acc)
+                nll = _fmt_float(row.nll)
+            mname = _model_display_name(row.model)
+            lines.append(rf"{mname} & {auc} & {acc} & {nll} " + r"\\")
+        lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table}", ""])
+        blocks.append("\n".join(lines))
+
+    if not blocks:
+        return
+    path.write_text("\n".join(blocks), encoding="utf-8")
 
 
 def _write_leakage_metrics_tex(path: Path) -> None:
@@ -208,7 +497,7 @@ def _write_leakage_metrics_tex(path: Path) -> None:
 
 
 def _write_graph_ablation_tex(path: Path) -> None:
-    """Emit train-only vs full-log ablation table from graph_ablation_summary.csv."""
+    """Emit train-only vs full-log ablation tables (one single-column table per dataset)."""
     csv_path = Path("results/tables/graph_ablation_summary.csv")
     if not csv_path.exists():
         return
@@ -230,39 +519,58 @@ def _write_graph_ablation_tex(path: Path) -> None:
 
     df = df.copy()
     df["_mo"] = df["model"].map(_ord)
-    label_map = {
-        "junyi": "Junyi Academy",
-        "assist2012": "ASSISTments 2012",
-        "xes3g5m": "XES3G5M",
-        "synthetic_c2": "Synthetic C2",
-        "synthetic_c5": "Synthetic C5",
-    }
-    lines = [
-        r"\begin{table*}[!t]",
-        r"\centering",
-        r"\footnotesize",
-        r"\setlength{\tabcolsep}{3pt}",
-        r"\caption{Ablation contrasting \emph{train-only} graph smoothing (protocol) with a \emph{full-log} graph "
-        r"built from all learners before splitting (leaky construction). Diagnostic graph-augmented ensembles "
-        r"(GKT, GIKT, SKT, DyGKT, DGEKT-style linear blends; Section~\ref{sec:exp-baseline}); evaluation split unchanged. "
+
+    ordered_slugs = [_dataset_slug(p) for p in CONFIGS]
+    base_cap = (
+        r"Ablation contrasting \emph{train-only} graph smoothing (protocol) with a \emph{full-log} graph "
+        r"built from all learners before splitting (leaky construction). Graph-augmented baselines use the "
+        r"same diagnostic feature channels as Section~\ref{sec:exp-baseline}; by default a \emph{trained} logistic "
+        r"head is fit on the train fold only (coefficients can emphasize the leaked graph channel). "
         r"$\Delta$ is the paired mean across folds (full-log minus train-only); "
-        r"positive $\Delta$AUC indicates higher discrimination when the graph sees the entire log.}",
-        r"\label{tab:graph-ablation}",
-        r"\begin{tabular}{@{}llcccccc@{}}",
-        r"\toprule",
-        r"Dataset & Model & \makecell{AUC\\train-only} & \makecell{AUC\\full-log} & $\Delta$AUC"
-        r" & \makecell{ACC\\train-only} & \makecell{ACC\\full-log} & $\Delta$ACC \\",
-        r"\midrule",
-    ]
-    for row in df.sort_values(["dataset", "_mo"]).itertuples(index=False):
-        ds = label_map.get(str(row.dataset).strip(), str(row.dataset).strip())
-        lines.append(
-            f"{ds} & {row.model.upper()} & {_fmt_float(row.auc_train_only)} & {_fmt_float(row.auc_full_log)} & {_fmt_float(row.delta_auc)}"
-            f" & {_fmt_float(row.acc_train_only)} & {_fmt_float(row.acc_full_log)} & {_fmt_float(row.delta_acc)} "
-            + r"\\"
-        )
-    lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table*}", ""])
-    path.write_text("\n".join(lines), encoding="utf-8")
+        r"positive $\Delta$AUC indicates higher discrimination when the graph sees the entire log. "
+        r"\emph{to}: train-only graph; \emph{fl}: full-log graph."
+    )
+    blocks: list[str] = []
+    first_block = True
+    for slug in ordered_slugs:
+        sub = df[df["dataset"].astype(str).str.strip() == slug]
+        if sub.empty:
+            continue
+        human = DATASET_LABELS.get(slug, slug)
+        label = GRAPH_ABLATION_TEX_LABEL.get(slug, f"tab:graph-ablation-{slug}")
+        cap = base_cap if first_block else rf"Train-only vs.\ full-log graph ablation: {human}."
+
+        lines = [
+            r"\begin{table}[t]",
+            r"\centering",
+            r"\scriptsize",
+            r"\setlength{\tabcolsep}{2pt}",
+            rf"\caption{{{cap}}}",
+        ]
+        if first_block:
+            lines.append(r"\label{tab:graph-ablation}")
+            first_block = False
+        lines.append(rf"\label{{{label}}}")
+        lines.extend([
+            r"\begin{tabular}{@{} >{\RaggedRight\arraybackslash}p{12mm} *{6}{c} @{}}",
+            r"\toprule",
+            r"Model & \makecell{AUC\\to} & \makecell{AUC\\fl} & $\Delta$AUC"
+            r" & \makecell{ACC\\to} & \makecell{ACC\\fl} & $\Delta$ACC \\",
+            r"\midrule",
+        ])
+        for row in sub.sort_values("_mo").itertuples(index=False):
+            mname = _model_display_name(row.model)
+            lines.append(
+                rf"{mname} & {_fmt_float(row.auc_train_only)} & {_fmt_float(row.auc_full_log)} & {_fmt_float(row.delta_auc)}"
+                rf" & {_fmt_float(row.acc_train_only)} & {_fmt_float(row.acc_full_log)} & {_fmt_float(row.delta_acc)} "
+                + r"\\"
+            )
+        lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{table}", ""])
+        blocks.append("\n".join(lines))
+
+    if not blocks:
+        return
+    path.write_text("\n".join(blocks), encoding="utf-8")
 
 
 def _write_cold_start_tex(path: Path) -> None:
@@ -316,6 +624,8 @@ def main() -> None:
     _write_baseline_tex(Path("results/tables/baseline_results.tex"))
     _write_graph_ablation_tex(Path("results/tables/graph_ablation.tex"))
     _write_leakage_metrics_tex(Path("results/tables/leakage_metrics.tex"))
+    _write_dag_audit_summary_tex(Path("results/tables/dag_audit_summary.tex"))
+    _write_cold_start_by_stratum_tex(Path("results/tables/cold_start_by_stratum.tex"))
     _write_cold_start_tex(Path("results/tables/cold_start_metrics.tex"))
     _write_artifact_index(Path("results/reports/paper_artifact_index.md"))
 

@@ -332,7 +332,7 @@ See `tests/test_graph_builder_train_only.py` for examples.
 | `results/tables/graph_stats.csv` | `graph_builder` | Per-fold edge / KC counts |
 | `results/tables/leakage_metrics.csv` (+ `.tex`) | `graph_builder` + `generate_paper_artifacts.py` | Fold-wise leakage diagnostics (`ECR_flag`, `ECR_overlap`, …); TeX is fold-mean summary |
 | `results/tables/graph_ablation_summary.csv` (+ `.tex`) | `baseline_runner` with `graph_ablation` + artefacts script | Train-only vs full-log graph-augmented diagnostics (models from YAML) |
-| `results/tables/dag_audit_summary.csv` (+ `.tex`) | Manual / pipeline notes | Fold-wise DAG audit rows (`dag_audit` writes CSV) |
+| `results/tables/dag_audit_summary.csv` (+ `.tex`) | `dag_audit` + `generate_paper_artifacts.py` | Fold-wise DAG audit (`dag_audit` writes CSV; artefacts backfill `n_edges_raw` / `n_edges_pruned` from pruning logs and emit IEEE TeX) |
 | `results/reports/<dataset>_dag_report.md` | `dag_audit` | Human-readable audit |
 | `results/reports/<dataset>_dag_pruning_log.csv` | `dag_audit` | Pruned edges trail |
 | `results/tables/dag_disruption.csv` | `dag_disruption` | Raw DDR rows (fold × aug × p × seed) |
@@ -340,7 +340,7 @@ See `tests/test_graph_builder_train_only.py` for examples.
 | `results/figures/fig_ddr_<dataset>.pdf` | `dag_disruption` | DDR vs `p` line chart per dataset |
 | `results/tables/baseline_results.csv` (+ `.tex`) | `baseline_runner` + `generate_paper_artifacts` | Multi-fold means + bootstrap CIs when enabled |
 | `results/tables/cold_start_metrics.csv` (+ `.tex`) | `cold_start_report` + artefacts script | Stratum summaries |
-| `results/tables/cold_start_by_stratum.tex` | From cold-start pipeline / artefacts | Per-stratum table for paper |
+| `results/tables/cold_start_by_stratum.tex` | `generate_paper_artifacts.py` | Paper table from `cold_start_metrics.csv` (default: fold~0 \textit{simpleKT}) |
 | `results/reports/cold_start_report.md` | `cold_start_report` | Narrative cold-start report |
 | `results/reports/paper_artifact_index.md` | `generate_paper_artifacts.py` | Index of tables/figures/reports |
 | `results/reports/p0_diagnostic_report.md` | `report_generator` | Aggregated diagnostic markdown |

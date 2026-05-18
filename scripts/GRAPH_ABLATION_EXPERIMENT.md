@@ -5,9 +5,25 @@
 - **Train-only**: prerequisite/similarity được suy ra chỉ từ **tập train của từng fold** (`data/processed/<dataset>/fold_<f>/e_pre_train_only.csv`, `e_sim_train_only.csv`).
 - **Full-log**: cùng một quy tắc suy luận nhưng trên **toàn bộ** parquet đã tiền xử lý (`data/processed/<dataset>/full_log/e_pre.csv`, `e_sim.csv`) — *cố ý* giống thực hành leaky (không dùng cho báo cáo protocol chính).
 
-Baseline diagnostic **GKT/GIKT** chạy hai lần (train-only vs full-log) trên **cùng** learner split; kết quả gộp vào `results/tables/graph_ablation_summary.csv` và bảng LaTeX `results/tables/graph_ablation.tex`.
+Baseline **GKT/GIKT/SKT/DyGKT/DGEKT** chạy hai lần (train-only vs full-log) trên **cùng** learner split; kết quả gộp vào `results/tables/graph_ablation_summary.csv` và bảng LaTeX `results/tables/graph_ablation.tex`.
 
-Trong `baseline_runner`, GKT/GIKT là **ensemble tuyến tính** (không phải PyTorch đầy đủ); nhánh ``graph`` làm mượt dự đoán theo **trung bình tỉ lệ đúng của các KC láng giềng** trên tập cạnh đã xuất. **Train-only**: láng giềng chỉ dùng nhãn trên **train fold** và cạnh từ `fold_<f>/`. **Full-log**: cạnh từ `full_log/` và láng giềng dùng tỉ lệ đúng KC **gộp trên toàn bộ parquet** (leaky có chỉnh ý ở nhánh graph). Trước đây chỉ đổi file cạnh mà vẫn dùng rate train cho láng giềng nên $\Delta$AUC/$\Delta$ACC thường gần 0.
+Trong `baseline_runner`, các model graph được đặt tên theo họ GKT nhưng là **diagnostic** trên các kênh đặc trưng (global / KC / item / user / graph / …). Theo mặc định trong config repo, **`graph_ablation.trained_leakage_head.enabled: true`** nên trước khi đánh giá val+test, một **đầu logistic (hồi quy sigmoid)** được huấn luyện bằng **mini-batch gradient descent chỉ trên tập train của fold** — các kênh không-graph vẫn lấy thống kê từ train fold; **chỉ nhánh graph** (cạnh + pooling láng giềng) khác giữa train-only và full-log. Điều này giúp mô hình **tăng trọng số** đối với tín hiệu graph bị leak nếu có, làm ΔAUC/ΔACC dễ thấy hơn so với ensemble cố định.
+
+Nếu đặt `trained_leakage_head.enabled: false` (hoặc chạy `--no-ablation-trained-head`), các model graph quay lại **ensemble tuyến tính cố định** (`MODEL_WEIGHTS`) như phiên bản cũ.
+
+**Train-only**: láng giềng chỉ dùng nhãn trên **train fold** và cạnh từ `fold_<f>/`. **Full-log**: cạnh từ `full_log/` và láng giềng dùng tỉ lệ đúng KC **gộp trên toàn bộ parquet** (leaky có chỉnh ý ở nhánh graph). Trước đây chỉ đổi file cạnh mà vẫn dùng rate train cho láng giềng nên $\Delta$AUC/$\Delta$ACC thường gần 0.
+
+### Cấu hình huấn luyện đầu logistic (`trained_leakage_head`)
+
+| Khóa YAML | Ý nghĩa |
+|-----------|---------|
+| `enabled` | Bật huấn luyện đầu logistic cho các model có nhánh `graph` |
+| `epochs` | Số epoch (full pass shuffle mini-batch trên train fold) |
+| `batch_size` | Kích thước mini-batch |
+| `lr` | learning rate |
+| `l2` | phạt L2 trên trọng số |
+
+CLI: `--ablation-trained-head` / `--no-ablation-trained-head` ghi đè cờ `enabled` trong config.
 
 ## Điều kiện trước khi chạy
 
@@ -33,7 +49,7 @@ Trong `baseline_runner`, GKT/GIKT là **ensemble tuyến tính** (không phải 
 
    Hoặc pipeline đầy đủ: `scripts/run_all_datasets_full.ps1`.
 
-3. **Cấu hình**: trong `configs/*.yaml` khối `graph_ablation` phải `enabled: true` và `models` liệt kê các model có nhánh graph trong `baseline_runner` (mặc định repo: `[gkt, gikt, skt, dygkt, dgekt]`).
+3. **Cấu hình**: trong `configs/*.yaml` khối `graph_ablation` phải `enabled: true` và `models` liệt kê các model có nhánh graph trong `baseline_runner` (mặc định repo: `[gkt, gikt, skt, dygkt, dgekt]`). Khối `graph_ablation.trained_leakage_head` điều khiển huấn luyện đầu logistic (mặc định `enabled: true` trong các config benchmark của repo).
 
 ## Chạy nhanh (Windows PowerShell)
 
@@ -46,7 +62,7 @@ Từ **thư mục gốc repo** (`p0_project`):
 **Tiến trình hiển thị**
 
 - PowerShell: thanh `Write-Progress` + dòng `[bước/tổng]` và % **theo từng lớp** (graph_builder → export → baseline → …); sau mỗi bước in thời gian đã chạy.
-- Trong **baseline** (`baseline_runner`), log `Baseline progress [dataset] i/N (~p%)` cho từng cặp fold × model × `graph_construction` (đây là phần thường lâu nhất). Không có % training epoch bên trong PyTorch — nếu cần chi tiết hơn:  
+- Trong **baseline** (`baseline_runner`), log `Baseline progress [dataset] i/N (~p%)` cho từng cặp fold × model × `graph_construction` (đây là phần thường lâu nhất). Khi `trained_leakage_head` bật, mỗi lần chạy graph model có huấn luyện mini-batch trên train fold (không PyTorch KT đầy đủ). Chi tiết log:  
   `python -m src.baseline_runner --config ... --log-level DEBUG`.
 
 Tham số tùy chọn:

@@ -1,41 +1,38 @@
 \begin{table}[t]
 \centering
-\caption{Per-stratum cold-start KC diagnostic with the strongest
-diagnostic baseline in our run (simpleKT). Strata are defined on
-train-fold KC frequency (Section~\ref{sec:cold-start}). The $n$ column
-is the number of test interactions whose KC falls in the stratum;
-\emph{out of range} captures any test interaction whose KC frequency
-falls outside the four canonical bins. Junyi Academy reports only the
-\emph{warm} and \emph{hot} strata because every \KC{} in the test fold
-has at least $20$ train-fold interactions; we report this as an
-empirical observation about the dataset.}
+\caption{Per-stratum cold-start KC diagnostic with \textit{simpleKT} on fold~0 
+(Section~\ref{sec:cold-start}). The $n$ column counts test interactions whose KC 
+falls in the stratum train-frequency bin; \emph{out of range} marks test KCs 
+outside the four canonical bins. Stratum mass varies by dataset split; under default bins 
+Synthetic C2/C5 route all test interactions into the hot stratum ($>500$ train-fold hits per \KC{}).}
 \label{tab:cold-start-strata}
 \footnotesize
 \setlength{\tabcolsep}{2pt}
 \renewcommand{\arraystretch}{1.05}
-\begin{tabular}{@{}
-  >{\RaggedRight\arraybackslash}p{24mm}
-  >{\ttfamily\footnotesize\raggedright\arraybackslash}p{30mm}
-  rrrr@{}}
+\begin{tabular}{@{} >{\RaggedRight\arraybackslash}p{24mm} >{\ttfamily\footnotesize\raggedright\arraybackslash}p{30mm} rrrr @{}}
 \toprule
 Dataset & Stratum & $n$ & AUC & ACC & NLL \\
 \midrule
-\multirow{2}{*}{\makecell[l]{Junyi\\Academy}}
-  & warm     &       5{,}402 & 0.665 & 0.618 & 0.649 \\
-  & hot      &   4{,}832{,}575 & 0.735 & 0.727 & 0.539 \\
+\multirow{5}{*}{\makecell[l]{Junyi\\Academy}} & very\_cold & 19 & 1.000 & 0.684 & 0.456 \\
+  & cold & 256 & 0.447 & 0.621 & 0.633 \\
+  & warm & 11{,}257 & 0.615 & 0.727 & 0.572 \\
+  & hot & 7{,}725{,}588 & 0.718 & 0.831 & 0.413 \\
+  & out of range & 10 & 0.500 & 0.900 & 0.511 \\
 \midrule
-\multirow{4}{*}{\makecell[l]{ASSISTments\\2012}}
-  & very\_cold &           49 & 0.608 & 0.755 & 0.631 \\
-  & cold       &          707 & 0.769 & 0.717 & 0.565 \\
-  & warm       &        9{,}017 & 0.765 & 0.687 & 0.587 \\
-  & hot        &      807{,}178 & 0.693 & 0.704 & 0.574 \\
+\multirow{4}{*}{ASSIST'12} & very\_cold & 49 & 0.608 & 0.755 & 0.631 \\
+  & cold & 707 & 0.769 & 0.717 & 0.565 \\
+  & warm & 9{,}017 & 0.765 & 0.687 & 0.587 \\
+  & hot & 807{,}178 & 0.693 & 0.704 & 0.574 \\
 \midrule
-\multirow{5}{*}{\makecell[l]{XES3G5M}}
-  & out of range &              6 & 0.625 & 0.667 & 0.638 \\
-  & very\_cold   &            161 & 0.810 & 0.814 & 0.424 \\
-  & cold         &        2{,}592 & 0.798 & 0.794 & 0.453 \\
-  & warm         &       17{,}655 & 0.790 & 0.805 & 0.431 \\
-  & hot          & 1{,}902{,}424 & 0.717 & 0.796 & 0.467 \\
+\multirow{5}{*}{XES3G5M} & very\_cold & 161 & 0.810 & 0.814 & 0.424 \\
+  & cold & 2{,}592 & 0.798 & 0.794 & 0.453 \\
+  & warm & 17{,}655 & 0.790 & 0.805 & 0.431 \\
+  & hot & 1{,}902{,}424 & 0.717 & 0.796 & 0.467 \\
+  & out of range & 6 & 0.625 & 0.667 & 0.638 \\
+\midrule
+\multirow{1}{*}{Synthetic C2} & hot & 60{,}000 & 0.624 & 0.683 & 0.607 \\
+\midrule
+\multirow{1}{*}{Synthetic C5} & hot & 60{,}000 & 0.630 & 0.611 & 0.651 \\
 \bottomrule
 \end{tabular}
 \end{table}
