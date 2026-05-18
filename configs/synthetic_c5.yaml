@@ -1,0 +1,61 @@
+dataset: synthetic_c5
+raw_path: data/raw/synthetic/
+raw_format: synthetic
+raw_interactions_file: data/raw/synthetic/naive_c5_q50_s4000_v0.csv
+raw_info_file: data/raw/synthetic/info/naive_c5_q50_s4000_v0_info.txt
+processed_path: data/processed/synthetic_c5.parquet
+has_dag: false
+schema_mapping:
+  user_id: user_id
+  item_id: item_id
+  kc_id: kc_id
+  timestamp: timestamp
+  correct: correct
+preprocess:
+  correct_mode: binary_only
+split:
+  type: learner_temporal
+  ratios: [0.7, 0.1, 0.2]
+  seed: 42
+  n_folds: 3
+graph:
+  e_pre_source: inferred
+  e_pre_support_quantile: 0.95
+  e_pre_top_k_per_node: 5
+  e_pre_max_edges: 5000
+  e_sim_method: jaccard
+  e_sim_threshold: 0.10
+  e_sim_top_k_per_node: 20
+graph_ablation:
+  enabled: true
+  models: [gkt, gikt, skt, dygkt, dgekt]
+augmentation:
+  methods: [node_drop, edge_drop, attr_mask, subgraph]
+  ps: [0.05, 0.10, 0.20, 0.30]
+  seeds: [42, 17, 1234]
+cold_start:
+  bins: [[-1, 19], [20, 99], [100, 499], [500, 10000000]]
+  metrics: [auc, acc, nll]
+baselines:
+  - name: bkt
+    enabled: true
+  - name: dkt
+    enabled: true
+  - name: simplekt
+    enabled: true
+  - name: akt
+    enabled: true
+  - name: gkt
+    enabled: true
+  - name: gikt
+    enabled: true
+  - name: skt
+    enabled: true
+  - name: dygkt
+    enabled: true
+  - name: dgekt
+    enabled: true
+logging:
+  level: INFO
+  experiment_log: logs/experiment_log.csv
+  leakage_audit_log: logs/leakage_audit_log.csv

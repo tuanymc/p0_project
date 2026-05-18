@@ -180,6 +180,8 @@ def _interaction_path(cfg: dict) -> Path:
 def _load_and_normalise_interactions(cfg: dict, limit_rows: int | None = None) -> pd.DataFrame:
     if cfg.get("raw_format") == "xes_sequence":
         return _load_and_normalise_xes_sequences(cfg, limit_rows=limit_rows)
+    if cfg.get("raw_format") == "synthetic":
+        return _load_and_normalise_synthetic(cfg, limit_rows=limit_rows)
     path = _interaction_path(cfg)
     mapping = cfg.get("schema_mapping", {})
     usecols = _mapped_raw_columns(mapping)
@@ -197,6 +199,54 @@ def _load_and_normalise_interactions(cfg: dict, limit_rows: int | None = None) -
     if not chunks:
         raise ValueError(f"No usable interactions found in {path}")
     return pd.concat(chunks, ignore_index=True).sort_values(["user_id", "timestamp", "item_id"]).reset_index(drop=True)
+
+
+def _load_and_normalise_synthetic(cfg: dict, limit_rows: int | None = None) -> pd.DataFrame:
+    raw_csv_path = Path(cfg["raw_interactions_file"])
+    raw_info_path = Path(cfg["raw_info_file"])
+    
+    logger.info("Loading synthetic dataset from csv: %s, info: %s", raw_csv_path, raw_info_path)
+    
+    import numpy as np
+    
+    # Read the info file to get concept mappings for items
+    info_df = pd.read_csv(raw_info_path, sep="\t", header=None)
+    item_to_kc = info_df[2].astype(int).tolist()
+    
+    df_raw = pd.read_csv(raw_csv_path, header=None)
+    if limit_rows is not None:
+        df_raw = df_raw.head(limit_rows)
+        
+    n_users = len(df_raw)
+    n_items = df_raw.shape[1]
+    
+    logger.info("Synthetic raw data size: %d users, %d items", n_users, n_items)
+    
+    user_ids, item_ids = np.meshgrid(np.arange(n_users), np.arange(n_items), indexing="ij")
+    
+    user_ids_flat = user_ids.ravel()
+    item_ids_flat = item_ids.ravel()
+    correct_flat = df_raw.to_numpy().ravel()
+    
+    item_to_kc_arr = np.array(item_to_kc)
+    kc_ids_flat = item_to_kc_arr[item_ids_flat]
+    
+    timestamps_flat = item_ids_flat
+    
+    df_canonical = pd.DataFrame({
+        "user_id": pd.Series(user_ids_flat).astype(str),
+        "item_id": pd.Series(item_ids_flat).astype(str),
+        "kc_id": pd.Series(kc_ids_flat).astype(str),
+        "timestamp": pd.Series(timestamps_flat).astype("int64"),
+        "correct": pd.Series(correct_flat).astype("int64")
+    })
+    
+    df_canonical["user_id"] = _encode_stable(df_canonical["user_id"])
+    df_canonical["item_id"] = _encode_stable(df_canonical["item_id"])
+    df_canonical["kc_id"] = _encode_stable(df_canonical["kc_id"])
+    
+    df_canonical = df_canonical.sort_values(["user_id", "timestamp", "item_id"]).reset_index(drop=True)
+    return df_canonical
 
 
 def _load_and_normalise_xes_sequences(cfg: dict, limit_rows: int | None = None) -> pd.DataFrame:

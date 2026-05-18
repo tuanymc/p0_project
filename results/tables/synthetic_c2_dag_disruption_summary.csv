@@ -1,0 +1,17 @@
+dataset,augmentation,p,ddr_mean,ddr_std,ddr_ci_low,ddr_ci_high,n
+synthetic_c2,attr_mask,0.05,0.0,0.0,0.0,0.0,9
+synthetic_c2,attr_mask,0.1,0.0,0.0,0.0,0.0,9
+synthetic_c2,attr_mask,0.2,0.0,0.0,0.0,0.0,9
+synthetic_c2,attr_mask,0.3,0.0,0.0,0.0,0.0,9
+synthetic_c2,edge_drop,0.05,0.0,0.0,0.0,0.0,9
+synthetic_c2,edge_drop,0.1,0.0,0.0,0.0,0.0,9
+synthetic_c2,edge_drop,0.2,0.16666666666666666,0.25,0.0,0.3333333333333333,9
+synthetic_c2,edge_drop,0.3,0.16666666666666666,0.25,0.0,0.3333333333333333,9
+synthetic_c2,node_drop,0.05,0.0,0.0,0.0,0.0,9
+synthetic_c2,node_drop,0.1,0.0,0.0,0.0,0.0,9
+synthetic_c2,node_drop,0.2,0.3333333333333333,0.5,0.0,0.6666666666666666,9
+synthetic_c2,node_drop,0.3,0.3333333333333333,0.5,0.0,0.6666666666666666,9
+synthetic_c2,subgraph,0.05,0.0,0.0,0.0,0.0,9
+synthetic_c2,subgraph,0.1,0.0,0.0,0.0,0.0,9
+synthetic_c2,subgraph,0.2,0.0,0.0,0.0,0.0,9
+synthetic_c2,subgraph,0.3,0.0,0.0,0.0,0.0,9

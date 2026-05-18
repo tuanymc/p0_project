@@ -54,6 +54,8 @@ DATASETS=(
   "configs/junyi.yaml:data/processed/junyi.parquet"
   "configs/assist2012.yaml:data/processed/assist2012.parquet"
   "configs/xes3g5m.yaml:data/processed/xes3g5m.parquet"
+  "configs/synthetic_c2.yaml:data/processed/synthetic_c2.parquet"
+  "configs/synthetic_c5.yaml:data/processed/synthetic_c5.parquet"
 )
 
 for entry in "${DATASETS[@]}"; do

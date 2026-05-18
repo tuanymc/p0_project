@@ -2,3 +2,5 @@ dataset,n_learners,n_items,n_kcs,n_interactions,missing_total
 junyi,247606,722,722,25925992,0
 assist2012,29018,53086,265,2711602,0
 xes3g5m,18066,7652,865,6413353,0
+synthetic_c2,4000,50,2,200000,0
+synthetic_c5,4000,50,5,200000,0

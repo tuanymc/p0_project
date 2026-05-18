@@ -19,7 +19,7 @@
 ## Fold 2
 - source_edges: `data\processed\junyi\fold_2\e_pre_train_only.csv`
 - nodes: 576
-- edges: 1130
+- edges: 1129
 - cycles_before: 100
 - cycles_after: 0
 - topo_sort_passed: True

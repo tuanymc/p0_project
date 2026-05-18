@@ -17,12 +17,16 @@ CONFIGS = [
     Path("configs/junyi.yaml"),
     Path("configs/assist2012.yaml"),
     Path("configs/xes3g5m.yaml"),
+    Path("configs/synthetic_c2.yaml"),
+    Path("configs/synthetic_c5.yaml"),
 ]
 
 DATASET_LABELS = {
     "junyi": "Junyi Academy",
     "assist2012": "ASSISTments 2012",
     "xes3g5m": "XES3G5M",
+    "synthetic_c2": "Synthetic C2",
+    "synthetic_c5": "Synthetic C5",
 }
 
 
@@ -186,7 +190,13 @@ def _write_leakage_metrics_tex(path: Path) -> None:
         r"Dataset & \textsc{ECR}\textsubscript{flag} & \textsc{ECR}\textsubscript{overlap} & \textsc{EOC} & \textsc{TBVR} \\",
         r"\midrule",
     ]
-    label_map = {"junyi": "Junyi Academy", "assist2012": "ASSISTments 2012", "xes3g5m": "XES3G5M"}
+    label_map = {
+        "junyi": "Junyi Academy",
+        "assist2012": "ASSISTments 2012",
+        "xes3g5m": "XES3G5M",
+        "synthetic_c2": "Synthetic C2",
+        "synthetic_c5": "Synthetic C5",
+    }
     for row in df.sort_values("dataset").itertuples(index=False):
         ds = str(row.dataset).strip()
         lines.append(
@@ -220,7 +230,13 @@ def _write_graph_ablation_tex(path: Path) -> None:
 
     df = df.copy()
     df["_mo"] = df["model"].map(_ord)
-    label_map = {"junyi": "Junyi Academy", "assist2012": "ASSISTments 2012", "xes3g5m": "XES3G5M"}
+    label_map = {
+        "junyi": "Junyi Academy",
+        "assist2012": "ASSISTments 2012",
+        "xes3g5m": "XES3G5M",
+        "synthetic_c2": "Synthetic C2",
+        "synthetic_c5": "Synthetic C5",
+    }
     lines = [
         r"\begin{table*}[!t]",
         r"\centering",

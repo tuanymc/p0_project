@@ -24,12 +24,18 @@
 - `results/tables/leakage_audit.tex`
 - `results/tables/leakage_metrics.csv`
 - `results/tables/leakage_metrics.tex`
+- `results/tables/synthetic_c2_dag_disruption.csv`
+- `results/tables/synthetic_c2_dag_disruption_summary.csv`
+- `results/tables/synthetic_c5_dag_disruption.csv`
+- `results/tables/synthetic_c5_dag_disruption_summary.csv`
 - `results/tables/xes3g5m_dag_disruption.csv`
 - `results/tables/xes3g5m_dag_disruption_summary.csv`
 
 ## Figures
 - `results/figures/fig_ddr_assist2012.pdf`
 - `results/figures/fig_ddr_junyi.pdf`
+- `results/figures/fig_ddr_synthetic_c2.pdf`
+- `results/figures/fig_ddr_synthetic_c5.pdf`
 - `results/figures/fig_ddr_xes3g5m.pdf`
 
 ## Reports
@@ -39,5 +45,8 @@
 - `results/reports/junyi_dag_pruning_log.csv`
 - `results/reports/junyi_dag_report.md`
 - `results/reports/p0_diagnostic_report.md`
+- `results/reports/synthetic_c2_dag_pruning_log.csv`
+- `results/reports/synthetic_c2_dag_report.md`
+- `results/reports/synthetic_c5_dag_report.md`
 - `results/reports/xes3g5m_dag_pruning_log.csv`
 - `results/reports/xes3g5m_dag_report.md`

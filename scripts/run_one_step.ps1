@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("junyi", "assist2012", "xes3g5m")]
+    [ValidateSet("junyi", "assist2012", "xes3g5m", "synthetic_c2", "synthetic_c5")]
     [string] $Dataset,
 
     [Parameter(Mandatory = $true)]
@@ -22,12 +22,16 @@ $Configs = @{
     junyi = "configs/junyi.yaml"
     assist2012 = "configs/assist2012.yaml"
     xes3g5m = "configs/xes3g5m.yaml"
+    synthetic_c2 = "configs/synthetic_c2.yaml"
+    synthetic_c5 = "configs/synthetic_c5.yaml"
 }
 
 $Processed = @{
     junyi = "data/processed/junyi.parquet"
     assist2012 = "data/processed/assist2012.parquet"
     xes3g5m = "data/processed/xes3g5m.parquet"
+    synthetic_c2 = "data/processed/synthetic_c2.parquet"
+    synthetic_c5 = "data/processed/synthetic_c5.parquet"
 }
 
 function Invoke-P0Step {

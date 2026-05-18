@@ -1,0 +1,4 @@
+src_kc,dst_kc,weight,source,reason,dataset,fold
+8573800373938698102,300471914551172981,0.9285714285714286,train_temporal_precedence,cycle_prune_lowest_confidence,synthetic_c2,0
+8573800373938698102,300471914551172981,0.9285714285714286,train_temporal_precedence,cycle_prune_lowest_confidence,synthetic_c2,1
+8573800373938698102,300471914551172981,0.9285714285714286,train_temporal_precedence,cycle_prune_lowest_confidence,synthetic_c2,2

@@ -5,7 +5,5 @@ data/processed/**
 __pycache__/
 .venv/
 *.egg-info/
-results/figures/*.pdf
-results/figures/*.png
 *.ipynb_checkpoints
 .pytest_cache/

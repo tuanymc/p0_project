@@ -2,18 +2,37 @@
 \centering
 \footnotesize
 \setlength{\tabcolsep}{3pt}
-\caption{Ablation contrasting \emph{train-only} graph smoothing (protocol) with a \emph{full-log} graph built from all learners before splitting (leaky construction). Diagnostic GKT/GIKT ensemble only; evaluation split unchanged. $\Delta$ is the paired mean across folds (full-log minus train-only); positive $\Delta$AUC indicates higher discrimination when the graph sees the entire log.}
+\caption{Ablation contrasting \emph{train-only} graph smoothing (protocol) with a \emph{full-log} graph built from all learners before splitting (leaky construction). Diagnostic graph-augmented ensembles (GKT, GIKT, SKT, DyGKT, DGEKT-style linear blends; Section~\ref{sec:exp-baseline}); evaluation split unchanged. $\Delta$ is the paired mean across folds (full-log minus train-only); positive $\Delta$AUC indicates higher discrimination when the graph sees the entire log.}
 \label{tab:graph-ablation}
 \begin{tabular}{@{}llcccccc@{}}
 \toprule
 Dataset & Model & \makecell{AUC\\train-only} & \makecell{AUC\\full-log} & $\Delta$AUC & \makecell{ACC\\train-only} & \makecell{ACC\\full-log} & $\Delta$ACC \\
 \midrule
-ASSISTments 2012 & GIKT & 0.693 & 0.693 & 0.000 & 0.700 & 0.700 & 0.000 \\
-ASSISTments 2012 & GKT & 0.604 & 0.603 & -0.001 & 0.697 & 0.697 & 0.000 \\
-Junyi Academy & GIKT & 0.713 & 0.713 & -0.000 & 0.829 & 0.829 & -0.000 \\
-Junyi Academy & GKT & 0.704 & 0.704 & -0.000 & 0.828 & 0.828 & 0.000 \\
-XES3G5M & GIKT & 0.710 & 0.710 & 0.000 & 0.795 & 0.795 & 0.000 \\
+ASSISTments 2012 & GKT & 0.604 & 0.604 & -0.000 & 0.696 & 0.696 & 0.000 \\
+ASSISTments 2012 & GIKT & 0.693 & 0.693 & -0.000 & 0.700 & 0.700 & 0.000 \\
+ASSISTments 2012 & SKT & 0.652 & 0.652 & -0.000 & 0.696 & 0.696 & 0.000 \\
+ASSISTments 2012 & DYGKT & 0.639 & 0.639 & -0.000 & 0.696 & 0.696 & 0.000 \\
+ASSISTments 2012 & DGEKT & 0.689 & 0.689 & -0.000 & 0.699 & 0.699 & 0.000 \\
+Junyi Academy & GKT & 0.704 & 0.704 & 0.000 & 0.828 & 0.828 & 0.000 \\
+Junyi Academy & GIKT & 0.713 & 0.713 & 0.000 & 0.829 & 0.829 & 0.000 \\
+Junyi Academy & SKT & 0.704 & 0.705 & 0.000 & 0.829 & 0.829 & 0.000 \\
+Junyi Academy & DYGKT & 0.707 & 0.707 & 0.000 & 0.828 & 0.828 & 0.000 \\
+Junyi Academy & DGEKT & 0.711 & 0.711 & -0.000 & 0.829 & 0.829 & -0.000 \\
+Synthetic C2 & GKT & 0.554 & 0.554 & 0.000 & 0.687 & 0.687 & 0.000 \\
+Synthetic C2 & GIKT & 0.635 & 0.635 & -0.000 & 0.687 & 0.687 & 0.000 \\
+Synthetic C2 & SKT & 0.633 & 0.633 & 0.000 & 0.687 & 0.687 & 0.000 \\
+Synthetic C2 & DYGKT & 0.632 & 0.631 & -0.000 & 0.687 & 0.687 & 0.000 \\
+Synthetic C2 & DGEKT & 0.635 & 0.635 & -0.000 & 0.687 & 0.687 & 0.000 \\
+Synthetic C5 & GKT & 0.524 & 0.524 & 0.000 & 0.611 & 0.611 & 0.000 \\
+Synthetic C5 & GIKT & 0.633 & 0.633 & 0.000 & 0.611 & 0.611 & 0.000 \\
+Synthetic C5 & SKT & 0.629 & 0.628 & -0.000 & 0.611 & 0.611 & 0.000 \\
+Synthetic C5 & DYGKT & 0.622 & 0.621 & -0.000 & 0.611 & 0.611 & 0.000 \\
+Synthetic C5 & DGEKT & 0.633 & 0.633 & -0.000 & 0.611 & 0.611 & 0.000 \\
 XES3G5M & GKT & 0.608 & 0.608 & -0.000 & 0.794 & 0.794 & 0.000 \\
+XES3G5M & GIKT & 0.710 & 0.710 & 0.000 & 0.795 & 0.795 & 0.000 \\
+XES3G5M & SKT & 0.660 & 0.660 & 0.001 & 0.794 & 0.794 & 0.000 \\
+XES3G5M & DYGKT & 0.646 & 0.646 & 0.000 & 0.794 & 0.794 & 0.000 \\
+XES3G5M & DGEKT & 0.704 & 0.705 & 0.000 & 0.795 & 0.795 & 0.000 \\
 \bottomrule
 \end{tabular}
 \end{table*}

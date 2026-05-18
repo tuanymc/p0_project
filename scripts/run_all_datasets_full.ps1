@@ -86,6 +86,14 @@ $Datasets = @(
     @{
         Config = "configs/xes3g5m.yaml"
         Processed = "data/processed/xes3g5m.parquet"
+    },
+    @{
+        Config = "configs/synthetic_c2.yaml"
+        Processed = "data/processed/synthetic_c2.parquet"
+    },
+    @{
+        Config = "configs/synthetic_c5.yaml"
+        Processed = "data/processed/synthetic_c5.parquet"
     }
 )
 
