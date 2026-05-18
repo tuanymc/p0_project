@@ -10,23 +10,27 @@ falls outside the four canonical bins. Junyi Academy reports only the
 has at least $20$ train-fold interactions; we report this as an
 empirical observation about the dataset.}
 \label{tab:cold-start-strata}
-\setlength{\tabcolsep}{5pt}
+\footnotesize
+\setlength{\tabcolsep}{2pt}
 \renewcommand{\arraystretch}{1.05}
-\begin{tabular}{llrrrr}
+\begin{tabular}{@{}
+  >{\RaggedRight\arraybackslash}p{24mm}
+  >{\ttfamily\footnotesize\raggedright\arraybackslash}p{30mm}
+  rrrr@{}}
 \toprule
 Dataset & Stratum & $n$ & AUC & ACC & NLL \\
 \midrule
-\multirow{2}{*}{Junyi Academy}
+\multirow{2}{*}{\makecell[l]{Junyi\\Academy}}
   & warm     &       5{,}402 & 0.665 & 0.618 & 0.649 \\
   & hot      &   4{,}832{,}575 & 0.735 & 0.727 & 0.539 \\
 \midrule
-\multirow{4}{*}{ASSISTments 2012}
+\multirow{4}{*}{\makecell[l]{ASSISTments\\2012}}
   & very\_cold &           49 & 0.608 & 0.755 & 0.631 \\
   & cold       &          707 & 0.769 & 0.717 & 0.565 \\
   & warm       &        9{,}017 & 0.765 & 0.687 & 0.587 \\
   & hot        &      807{,}178 & 0.693 & 0.704 & 0.574 \\
 \midrule
-\multirow{5}{*}{XES3G5M}
+\multirow{5}{*}{\makecell[l]{XES3G5M}}
   & out of range &              6 & 0.625 & 0.667 & 0.638 \\
   & very\_cold   &            161 & 0.810 & 0.814 & 0.424 \\
   & cold         &        2{,}592 & 0.798 & 0.794 & 0.453 \\

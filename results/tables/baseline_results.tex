@@ -1,29 +1,31 @@
-\begin{table}[t]
+\begin{table*}[!t]
 \centering
 \caption{Diagnostic baseline results. Baselines are used for protocol comparison only; no SOTA claim is made. Values are fold means with 95\% bootstrap confidence intervals when available.}
 \label{tab:baseline-results}
-\begin{tabular}{llrrr}
+\footnotesize
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{} >{\RaggedRight\arraybackslash}p{32mm} >{\centering\arraybackslash}p{18mm} *{3}{>{\centering\arraybackslash}m{36mm}} @{}}
 \toprule
 Dataset & Model & AUC & ACC & NLL \\
 \midrule
-assist2012 & akt & 0.684 [0.682, 0.686] & 0.700 [0.696, 0.702] & 0.584 [0.582, 0.587] \\
-assist2012 & bkt & 0.608 [0.607, 0.610] & 0.698 [0.694, 0.700] & 0.598 [0.596, 0.602] \\
-assist2012 & dkt & 0.689 [0.687, 0.691] & 0.697 [0.693, 0.699] & 0.586 [0.584, 0.589] \\
-assist2012 & gikt & 0.693 [0.690, 0.694] & 0.700 [0.696, 0.702] & 0.578 [0.576, 0.582] \\
-assist2012 & gkt & 0.604 [0.602, 0.605] & 0.697 [0.692, 0.699] & 0.601 [0.600, 0.605] \\
-assist2012 & simplekt & 0.697 [0.695, 0.699] & 0.707 [0.704, 0.709] & 0.571 [0.569, 0.574] \\
-junyi & akt & 0.717 [0.717, 0.718] & 0.829 [0.827, 0.830] & 0.426 [0.424, 0.428] \\
-junyi & bkt & 0.719 [0.718, 0.719] & 0.830 [0.828, 0.831] & 0.415 [0.414, 0.417] \\
-junyi & dkt & 0.719 [0.718, 0.719] & 0.828 [0.827, 0.829] & 0.424 [0.422, 0.426] \\
-junyi & gikt & 0.713 [0.713, 0.714] & 0.829 [0.827, 0.830] & 0.421 [0.419, 0.423] \\
-junyi & gkt & 0.704 [0.703, 0.705] & 0.828 [0.827, 0.829] & 0.426 [0.425, 0.429] \\
-junyi & simplekt & 0.719 [0.718, 0.719] & 0.830 [0.828, 0.831] & 0.415 [0.414, 0.417] \\
-xes3g5m & akt & 0.707 [0.707, 0.708] & 0.795 [0.794, 0.795] & 0.480 [0.480, 0.481] \\
-xes3g5m & bkt & 0.618 [0.617, 0.618] & 0.795 [0.794, 0.795] & 0.493 [0.492, 0.493] \\
-xes3g5m & dkt & 0.709 [0.709, 0.709] & 0.794 [0.794, 0.795] & 0.480 [0.480, 0.481] \\
-xes3g5m & gikt & 0.710 [0.710, 0.710] & 0.795 [0.794, 0.795] & 0.473 [0.472, 0.474] \\
-xes3g5m & gkt & 0.608 [0.608, 0.608] & 0.794 [0.794, 0.795] & 0.496 [0.496, 0.497] \\
-xes3g5m & simplekt & 0.718 [0.718, 0.719] & 0.796 [0.796, 0.797] & 0.466 [0.465, 0.467] \\
+assist2012 & akt & \makecell{0.684\\[-1pt]{\scriptsize[0.682, 0.686]}} & \makecell{0.700\\[-1pt]{\scriptsize[0.696, 0.702]}} & \makecell{0.584\\[-1pt]{\scriptsize[0.582, 0.587]}} \\
+assist2012 & bkt & \makecell{0.608\\[-1pt]{\scriptsize[0.607, 0.610]}} & \makecell{0.698\\[-1pt]{\scriptsize[0.694, 0.700]}} & \makecell{0.598\\[-1pt]{\scriptsize[0.596, 0.602]}} \\
+assist2012 & dkt & \makecell{0.689\\[-1pt]{\scriptsize[0.687, 0.691]}} & \makecell{0.697\\[-1pt]{\scriptsize[0.693, 0.699]}} & \makecell{0.586\\[-1pt]{\scriptsize[0.584, 0.589]}} \\
+assist2012 & gikt & \makecell{0.693\\[-1pt]{\scriptsize[0.690, 0.694]}} & \makecell{0.700\\[-1pt]{\scriptsize[0.696, 0.702]}} & \makecell{0.578\\[-1pt]{\scriptsize[0.576, 0.582]}} \\
+assist2012 & gkt & \makecell{0.604\\[-1pt]{\scriptsize[0.602, 0.605]}} & \makecell{0.697\\[-1pt]{\scriptsize[0.692, 0.699]}} & \makecell{0.601\\[-1pt]{\scriptsize[0.600, 0.605]}} \\
+assist2012 & simplekt & \makecell{0.697\\[-1pt]{\scriptsize[0.695, 0.699]}} & \makecell{0.707\\[-1pt]{\scriptsize[0.704, 0.709]}} & \makecell{0.571\\[-1pt]{\scriptsize[0.569, 0.574]}} \\
+junyi & akt & \makecell{0.717\\[-1pt]{\scriptsize[0.717, 0.718]}} & \makecell{0.829\\[-1pt]{\scriptsize[0.827, 0.830]}} & \makecell{0.426\\[-1pt]{\scriptsize[0.424, 0.428]}} \\
+junyi & bkt & \makecell{0.719\\[-1pt]{\scriptsize[0.718, 0.719]}} & \makecell{0.830\\[-1pt]{\scriptsize[0.828, 0.831]}} & \makecell{0.415\\[-1pt]{\scriptsize[0.414, 0.417]}} \\
+junyi & dkt & \makecell{0.719\\[-1pt]{\scriptsize[0.718, 0.719]}} & \makecell{0.828\\[-1pt]{\scriptsize[0.827, 0.829]}} & \makecell{0.424\\[-1pt]{\scriptsize[0.422, 0.426]}} \\
+junyi & gikt & \makecell{0.713\\[-1pt]{\scriptsize[0.713, 0.714]}} & \makecell{0.829\\[-1pt]{\scriptsize[0.827, 0.830]}} & \makecell{0.421\\[-1pt]{\scriptsize[0.419, 0.423]}} \\
+junyi & gkt & \makecell{0.704\\[-1pt]{\scriptsize[0.703, 0.705]}} & \makecell{0.828\\[-1pt]{\scriptsize[0.827, 0.829]}} & \makecell{0.426\\[-1pt]{\scriptsize[0.425, 0.429]}} \\
+junyi & simplekt & \makecell{0.719\\[-1pt]{\scriptsize[0.718, 0.719]}} & \makecell{0.830\\[-1pt]{\scriptsize[0.828, 0.831]}} & \makecell{0.415\\[-1pt]{\scriptsize[0.414, 0.417]}} \\
+xes3g5m & akt & \makecell{0.707\\[-1pt]{\scriptsize[0.707, 0.708]}} & \makecell{0.795\\[-1pt]{\scriptsize[0.794, 0.795]}} & \makecell{0.480\\[-1pt]{\scriptsize[0.480, 0.481]}} \\
+xes3g5m & bkt & \makecell{0.618\\[-1pt]{\scriptsize[0.617, 0.618]}} & \makecell{0.795\\[-1pt]{\scriptsize[0.794, 0.795]}} & \makecell{0.493\\[-1pt]{\scriptsize[0.492, 0.493]}} \\
+xes3g5m & dkt & \makecell{0.709\\[-1pt]{\scriptsize[0.709, 0.709]}} & \makecell{0.794\\[-1pt]{\scriptsize[0.794, 0.795]}} & \makecell{0.480\\[-1pt]{\scriptsize[0.480, 0.481]}} \\
+xes3g5m & gikt & \makecell{0.710\\[-1pt]{\scriptsize[0.710, 0.710]}} & \makecell{0.795\\[-1pt]{\scriptsize[0.794, 0.795]}} & \makecell{0.473\\[-1pt]{\scriptsize[0.472, 0.474]}} \\
+xes3g5m & gkt & \makecell{0.608\\[-1pt]{\scriptsize[0.608, 0.608]}} & \makecell{0.794\\[-1pt]{\scriptsize[0.794, 0.795]}} & \makecell{0.496\\[-1pt]{\scriptsize[0.496, 0.497]}} \\
+xes3g5m & simplekt & \makecell{0.718\\[-1pt]{\scriptsize[0.718, 0.719]}} & \makecell{0.796\\[-1pt]{\scriptsize[0.796, 0.797]}} & \makecell{0.466\\[-1pt]{\scriptsize[0.465, 0.467]}} \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}

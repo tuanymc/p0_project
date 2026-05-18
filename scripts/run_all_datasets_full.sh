@@ -67,6 +67,7 @@ for entry in "${DATASETS[@]}"; do
   fi
   run_step -m src.split_checker --config "$CFG"
   run_step -m src.graph_builder --config "$CFG"
+  run_step -m src.export_full_log_graph --config "$CFG"
   run_step -m src.dag_audit --config "$CFG"
   run_step -m src.dag_disruption --config "$CFG"
   run_step -m src.baseline_runner --config "$CFG"

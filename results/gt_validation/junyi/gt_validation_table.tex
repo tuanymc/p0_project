@@ -2,19 +2,21 @@
 \centering
 \caption{GT cross-validation: agreement between train-only inferred $E_{\text{pre}}$ and expert prerequisite DAG on Junyi Academy ($|E|=1131$ directed edges).}
 \label{tab:gt-validation}
-\begin{tabular}{l c c c c}
+\footnotesize
+\setlength{\tabcolsep}{2pt}
+\begin{tabularx}{\linewidth}{@{} >{\RaggedRight\arraybackslash}X cccc @{}}
 \toprule
-$K$ (top inferred edges) & Edge Prec.\ & Edge Rec.\ & Direction Agr.\ & Reachability F1 \\
+\makecell[l]{$K$ (top inferred)} & \makecell{Edge\\prec.} & \makecell{Edge\\rec.} & \makecell{Dir.\\agr.} & \makecell{Rch.\\F1} \\
 \midrule
 200 & 0.235 & 0.042 & 0.346 & 0.008 \\
 500 & 0.178 & 0.079 & 0.225 & 0.021 \\
 800 & 0.181 & 0.128 & 0.280 & 0.062 \\
-$|$expert$|$ = 1131 & 0.183 & 0.183 & 0.261 & 0.104 \\
+\makecell[l]{$\lvert E_\mathrm{expert}\rvert{=}1131$} & 0.183 & 0.183 & 0.261 & 0.104 \\
 1200 & 0.180 & 0.191 & 0.262 & 0.126 \\
 1800 & 0.153 & 0.243 & 0.278 & 0.260 \\
 2500 & 0.143 & 0.271 & 0.285 & 0.339 \\
 3500 & 0.143 & 0.271 & 0.285 & 0.339 \\
 5000 (cap) & 0.143 & 0.271 & 0.285 & 0.339 \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}

@@ -6,16 +6,30 @@ pruning; \emph{Pruned} is the difference. The \emph{Cycles} column is
 reported with the protocol's top-$100$ cycle-detection cap. All three
 datasets yield zero cycles after pruning and pass topological sort.}
 \label{tab:dag-audit}
-\small
-\setlength{\tabcolsep}{4pt}
+\footnotesize
+\setlength{\tabcolsep}{2pt}
 \renewcommand{\arraystretch}{1.05}
-\begin{tabular}{@{}lrrrrrrr@{}}
+\begin{tabular}{@{}
+  >{\RaggedRight\arraybackslash}p{11mm}
+  r
+  >{\centering\arraybackslash}p{16mm}
+  r
+  >{\centering\arraybackslash}p{16mm}
+  r r r
+@{}}
 \toprule
-Dataset & $|V|$ & Raw $|\Epre|$ & Pruned & Final $|\Epre|$ & Roots & Leaves & Cycles \\
+\makecell[l]{Dataset}
+  & $|V|$
+  & \makecell{Raw\\$|\Epre|$}
+  & Pruned
+  & \makecell{Final\\$|\Epre|$}
+  & Roots
+  & Leaves
+  & \makecell{Cycles\\(cap)} \\
 \midrule
-Junyi      &     573 & 2{,}152 & 1{,}013 & 1{,}139 &  90 &  92 & $\geq\!100$ \\
-ASSIST'12  &     139 &     413 &     152 &     261 &  34 &  23 & $\geq\!100$ \\
-XES3G5M    &     455 & 1{,}162 &     461 &     701 & 129 &  73 & $\geq\!100$ \\
+Junyi      & 573 & 2{,}152 & 1{,}013 & 1{,}139 &  90 &  92 & $\geq\!100$ \\
+ASSIST'12  & 139 &     413 &     152 &     261 &  34 &  23 & $\geq\!100$ \\
+XES3G5M    & 455 & 1{,}162 &     461 &     701 & 129 &  73 & $\geq\!100$ \\
 \bottomrule
 \end{tabular}
 \end{table}

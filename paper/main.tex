@@ -31,7 +31,8 @@
 %
 % v7 was the Vietnamese translation of v6; v8 builds on v6 directly (English).
 %-----------------------------------------------------------------------------
-\documentclass[runningheads]{llncs}
+% IEEE Conference proceedings template (IEEEtran).
+\documentclass[conference]{IEEEtran}
 % --- Encoding & typography --------------------------------------------------
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -39,6 +40,9 @@
 % --- Math, tables, figures --------------------------------------------------
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{ragged2e}
+\usepackage{makecell}
 \usepackage{multirow}
 \usepackage{array}
 \usepackage{siunitx}
@@ -46,9 +50,11 @@
 \usepackage{xcolor}
 \usepackage{subcaption}
 \usepackage{float}
+
 % --- Bibliography -----------------------------------------------------------
 \usepackage{cite}
-% --- Hyperlinks -------------------------------------------------------------
+% --- Hyperlinks ------------------------------------------------------------- %
+% Load hyperref after IEEEtran; keeps PDF bookmarks/nav consistent with IEEE.
 \usepackage[colorlinks=true,allcolors=blue!50!black]{hyperref}
 \usepackage{cleveref}
 % --- Compact float spacing --------------------------------------------------
@@ -67,26 +73,22 @@
 \title{Leakage-Controlled Concept Graph Construction
        and Cold-Start Diagnostic Protocol
        for Knowledge Tracing}
-\titlerunning{Leakage-Controlled KC Graph Construction for KT}
 
-\author{
-Dao Minh Tuan\inst{1} \and
-Nguyen Tien Duong\inst{1} \and
-Nguyen Khanh Trinh\inst{1} \and
-Nguyen Van Hau\inst{1} \and
-Le Hoang Son\inst{2}
-}
-
-\authorrunning{D.~M.~Tuan et al.}
-
-\institute{
-Hung Yen University of Technology and Education,
-Hung Yen, Vietnam
-\and
-VNU Information Technology Institute, Vietnam National University,\\
-144 Xuan Thuy Street, Cau Giay Ward, Ha Noi, Vietnam
-\\
-\email{tuan.ymc@gmail.com}
+\author{%
+  \IEEEauthorblockN{%
+    Dao Minh Tuan\IEEEauthorrefmark{1},
+    Nguyen Tien Duong\IEEEauthorrefmark{1},
+    Nguyen Khanh Trinh\IEEEauthorrefmark{1},
+    Nguyen Van Hau\IEEEauthorrefmark{1},
+    and Le Hoang Son\IEEEauthorrefmark{2}}%
+  \IEEEauthorblockA{\IEEEauthorrefmark{1}%
+    Hung Yen University of Technology and Education\\
+    Hung Yen, Vietnam\\
+    Email: \href{mailto:tuan.ymc@gmail.com}{tuan.ymc@gmail.com}}%
+  \IEEEauthorblockA{\IEEEauthorrefmark{2}%
+    VNU Information Technology Institute\\
+    Vietnam National University\\
+    144 Xuan Thuy Street, Cau Giay Ward, Ha Noi, Vietnam}%
 }
 
 \maketitle
@@ -124,10 +126,17 @@ evaluation when comparing graph-augmented and sequence-only KT. The
 cold-start diagnostic exposes per-stratum behaviour that aggregate AUC
 can hide. The paper is positioned as a reproducible protocol/resource
 for graph-enhanced KT, not as a new KT model.
-\keywords{Knowledge tracing \and Concept graphs \and Leakage control
-\and DAG audit \and Ground-truth cross-validation \and Cold-start
-diagnostics \and Reproducibility}
 \end{abstract}
+
+\begin{IEEEkeywords}
+Knowledge tracing,
+Concept graphs,
+Leakage control,
+DAG audit,
+Ground-truth cross-validation,
+Cold-start diagnostics,
+Reproducibility
+\end{IEEEkeywords}
 %-----------------------------------------------------------------------------
 \section{Introduction}
 \label{sec:intro}
@@ -258,17 +267,144 @@ $G_f=(\mathcal{C},\Epre^f\cup\Esim^f)$ using only
 $\mathcal{F}_{\text{train}}^f$.
 \subsection{Leakage Control}
 \label{sec:leakage}
-We audit four leakage classes: edge leakage, Q-matrix leakage, temporal
-leakage, and cold-start KC neighbourhood leakage. Edge leakage occurs
-when similarity or prerequisite edges are computed using held-out
-interactions. Q-matrix leakage occurs when item--KC mappings are fitted
-using full data rather than expert tags or train-only evidence.
-Temporal leakage occurs when edges are inferred from interactions at or
-after the temporal split boundary. Cold-start KC neighbourhood leakage
-occurs when edges involving rare \KCs{} are inferred from test-fold
-interactions. Each inferred edge is therefore logged with its fold of
-origin, timestamp range, relation type, and train-only flag. Any
-violation halts the pipeline.
+We audit five leakage classes---\emph{structural}, \emph{edge}, \emph{target},
+\emph{temporal}, and \emph{cold-start neighbourhood}---summarised in
+Table~\ref{tab:leakage-taxonomy}. Structural leakage occurs when the same
+learner contributes interactions to more than one of train, validation, or test under a fold, coupling splits at the identifier level. Edge leakage occurs when similarity or
+prerequisite edges receive statistical support from interactions
+outside the train fold of that evaluation split. Target leakage occurs
+when correctness labels, outcome-conditioned statistics, or other
+supervision-derived artefacts influence graph construction or features
+after pooling across splits (including fitting item--KC mappings on
+full data instead of expert tags or train-only evidence). Temporal
+leakage occurs when interactions at or after the learner-specific split
+boundary contribute to edge inference or to graph-derived inputs at
+evaluation time. Cold-start neighbourhood leakage is the special case
+where edges touching rare \KCs{} are justified primarily by held-out or
+future-split interactions, so tail-\KC{} structure mirrors aggregate
+performance rather than train-plausible evidence.
+
+\begin{table*}[!t]
+\centering
+\caption{Taxonomy of leakage classes audited by the protocol: typical
+source of contamination, a concrete KT example, and the primary
+direct diagnostic used in this paper (Section~\ref{sec:leakage}).}
+\label{tab:leakage-taxonomy}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}p{0.14\linewidth} p{0.20\linewidth} p{0.44\linewidth} p{0.16\linewidth}@{}}
+\toprule
+Class & Source & Example & Metric \\
+\midrule
+Structural &
+Learner identifiers reused across train, validation, and test folds &
+The same learner contributes interactions to both train and held-out partitions under fold $f$ &
+$\mathrm{ECR}^{\mathrm{flag}}$ \\
+Edge &
+Interactions outside $\mathcal{F}_{\text{train}}^f$ used as evidence for edges &
+Prerequisite or similarity edge retained because val/test transitions inflate co-occurrence or transition counts &
+$\mathrm{ECR}^{\mathrm{overlap}}$ \\
+Target &
+Outcomes or mappings pooled across splits &
+Q-matrix or calibration statistics fit on all learners; edge weights implicitly tuned against aggregated correctness &
+EOC \\
+Temporal &
+Violating the timestamp boundary $\tau_u$ per learner $u$ &
+Post-boundary attempts included when counting $c_t\!\to\!c_{t+1}$ support or when building time-sensitive features &
+TBVR \\
+Cold-start neighbourhood &
+Tail-\KC{} edges dominated by non-train support &
+Rare-\KC{} similarity edge driven mainly by interactions that belong to val/test under the split &
+$\mathrm{ECR}^{\mathrm{overlap}}$ (+ strata) \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Each inferred edge is logged with its fold of origin, timestamp range,
+relation type, and train-only flag; severe violations halt the pipeline.
+In addition, we report four scalar \emph{direct} leakage diagnostics that do
+not reduce to predictive accuracy. Let $\mathcal{U}^{\mathrm{tr}}_f$,
+$\mathcal{U}^{\mathrm{va}}_f$, and $\mathcal{U}^{\mathrm{te}}_f$ denote the
+learner-id sets in train, validation, and test under fold $f$. The learner overlap flag is
+\begin{equation}
+\mathrm{ECR}^{\mathrm{flag}}_f := \mathbb{1}\big[
+(\mathcal{U}^{\mathrm{tr}}_f \cap \mathcal{U}^{\mathrm{va}}_f) \cup
+(\mathcal{U}^{\mathrm{tr}}_f \cap \mathcal{U}^{\mathrm{te}}_f) \cup
+(\mathcal{U}^{\mathrm{va}}_f \cap \mathcal{U}^{\mathrm{te}}_f)
+\neq \emptyset
+\big]\,.
+\label{eq:ecr-flag}
+\end{equation}
+When folds are learner-disjoint, $\mathrm{ECR}^{\mathrm{flag}}_f=0$ for every fold---the regime enforced below.
+
+Let $\mathcal{E}_f$ denote the graph edge set (prerequisite and similarity) consumed when evaluating fold
+$f$, and let $\mathcal{H}_f = \mathcal{F}_{\text{val}}^{f} \cup
+\mathcal{F}_{\text{test}}^{f}$ denote held-out interactions under that
+split. For an edge $e=(i,j)$, let $S_{\text{tr}}(e)$ be the multiset of
+train-fold interaction tokens counted toward $e$'s evidence, and let
+$S_{\text{hi}}(e)$ be the analogous multiset restricted to
+$\mathcal{H}_f$. Define the overlap indicator
+$\chi_{\mathrm{ECR}^{\mathrm{overlap}}}(e)=\mathbb{1}[|S_{\text{hi}}(e)|>0]$.
+The held-out pattern overlap rate mirrors an edge-level importance scan (cf.\ feature importance plots): it asks whether each retained edge
+aligns with \emph{some} mass observable among held-out interactions---possibly contributed by disjoint learners---rather than encoding learner pooling across folds,
+\begin{equation}
+\mathrm{ECR}^{\mathrm{overlap}}_f \;=\; \frac{1}{|\mathcal{E}_f|}\sum_{e\in\mathcal{E}_f}
+\chi_{\mathrm{ECR}^{\mathrm{overlap}}}(e)\,.
+\label{eq:ecr-overlap}
+\end{equation}
+For Edge--Outcome Correlation, stack normalized edge weights into
+$\mathbf{w}_f\in\mathbb{R}^{|\mathcal{E}_f|}$ (for ties, use the order
+exported by the audit log). Let $\mathbf{y}_f\in\mathbb{R}^{|\mathcal{E}_f|}$
+carry test-fold outcome summaries aligned to each edge---for example,
+endpoint averages of correctness on $\mathcal{F}_{\text{test}}^{f}$ or
+their logits---computed \emph{after} graph construction (labels are used
+only for this diagnostic, not for inferring $\mathcal{E}_f$).
+Let $R_f\in[-1,1]^{2\times 2}$ be the Pearson correlation matrix between
+the two scalar sequences $(w,y)$ pooled over edges with defined variance.
+\begin{equation}
+\mathrm{EOC}_f \;=\; \|R_f\|_F\,,
+\label{eq:eoc}
+\end{equation}
+For binary correctness summaries this matches the spirit of a $2\times 2$
+correlation-matrix summary relating structural edge mass to outcome mass;
+if $\mathrm{Corr}(\mathbf{w}_f,\mathbf{y}_f)=\rho$, then $R_f$ has unit
+diagonal and off-diagonals $\rho$, hence
+$\mathrm{EOC}_f=\sqrt{2+2\rho^2}$.
+
+Let $t_{u,i}$ be the timestamp of interaction $i$ for learner $u$ and
+let $\tau_u$ be $u$'s temporal split cutoff for fold $f$. Write
+$\mathcal{I}_{u,f}^{>}=\{\, i : t_{u,i}>\tau_u \,\}$ for post-boundary
+interactions and $\mathcal{V}_{u,f}$ for the subset of those tokens that
+incorrectly appear in any multiset counted toward $\mathcal{E}_f$ or in
+graph-derived features at inference for fold $f$. The Temporal
+Boundary Violation Rate is
+\begin{equation}
+\mathrm{TBVR}_f \;=\;
+\frac{\sum_u |\mathcal{V}_{u,f}|}{\sum_u |\mathcal{I}_{u,f}^{>}|}\,.
+\label{eq:tbvr}
+\end{equation}
+Under learner-disjoint splits, no learner spans train and held-out folds;
+we therefore instantiate $\tau_u$ \emph{within}
+$\mathcal{F}_{\text{train}}^f$ by taking $\tau_u$ at the index that
+separates the earliest $\lfloor r n_u\rfloor$ chronologically ordered
+train interactions from the tail of learner $u$, where $r$ matches the
+protocol train ratio (here $r{=}0.7$) and $n_u$ is $u$'s train-fold length.
+The multiset checked is the transition evidence underlying the retained
+prerequisite edges $\Epre^f$.
+Ideal structural hygiene yields $\mathrm{ECR}^{\mathrm{flag}}_f{=}0$, temporal hygiene yields $\mathrm{TBVR}_f{=}0$, and we additionally desire a modest $\mathrm{EOC}_f$ relative to permuted-reference baselines.
+The overlap statistic $\mathrm{ECR}^{\mathrm{overlap}}_f$ \emph{need not} vanish under honest splits because ubiquitous curricula reproduce frequent prerequisite transitions across disjoint learners; large $\mathrm{ECR}^{\mathrm{overlap}}_f$ therefore must not be read as $\mathrm{ECR}^{\mathrm{flag}}_f{=}1$ or as a train-only provenance violation without consulting the audit trail.
+
+\paragraph{Why AUC/ACC are insufficient.}
+High test AUC or accuracy does \emph{not} certify absence of leakage:
+held-out information can be \emph{baked into} the graph (or static
+artefacts) before optimisation, so the model merely exploits a
+consistent shortcut rather than measuring generalisation under honest
+provenance. Conversely, scrubbing leakage can lower headline metrics
+without making the model worse in substance---it removes illegitimate
+signals. Direct diagnostics such as $\mathrm{ECR}^{\mathrm{flag}}_f$, $\mathrm{ECR}^{\mathrm{overlap}}_f$, $\mathrm{EOC}_f$,
+and $\mathrm{TBVR}_f$ therefore complement discrimination scores by
+testing whether the structural inputs themselves remain statistically
+independent of the wrong folds or outcomes.
 \subsection{Train-only Graph Construction}
 \label{sec:graph}
 \paragraph{Prerequisite edges $\Epre$.}
@@ -436,7 +572,10 @@ temporal splits with ratios $(0.7,0.1,0.2)$ and seed \texttt{42}; all
 edge provenance is regenerated for each run.
 \subsection{Leakage and DAG Audit}
 \label{sec:exp-audit}
+\input{results/tables/leakage_metrics.tex}
 \input{results/tables/dag_audit_summary.tex}
+Table~\ref{tab:leakage-metrics} summarises the direct leakage metrics on
+the released runs. $\mathrm{ECR}^{\mathrm{flag}}$ is identically zero on every dataset (fold means), confirming learner-disjoint splits and structural leakage freedom at the evaluation protocol level; $\mathrm{ECR}^{\mathrm{overlap}}$ stays near unity because recurrent transition patterns reappear among held-out learners even though edges are inferred strictly from train folds.
 The leakage audit reports that all retained graph edges are train-only
 under the current fold configuration. Table~\ref{tab:dag-audit} reports
 the DAG audit. The protocol produces non-empty acyclic prerequisite
@@ -463,23 +602,23 @@ produce cycles. The audit therefore makes the pruning rule explicit and
 reviewable rather than silently fixing the graph.
 \subsection{DAG Disruption Rate}
 \label{sec:exp-ddr}
-\begin{figure}[H]
+\begin{figure*}[!t]
 \centering
-\begin{subfigure}[t]{0.48\linewidth}
+\begin{subfigure}[t]{0.319\textwidth}
     \centering
     \includegraphics[width=\linewidth]{results/figures/fig_ddr_junyi.pdf}
     \caption{Junyi Academy}
     \label{fig:ddr-junyi}
 \end{subfigure}
 \hfill
-\begin{subfigure}[t]{0.48\linewidth}
+\begin{subfigure}[t]{0.319\textwidth}
     \centering
     \includegraphics[width=\linewidth]{results/figures/fig_ddr_assist2012.pdf}
     \caption{ASSISTments 2012}
     \label{fig:ddr-assist2012}
 \end{subfigure}
-\vspace{0.6em}
-\begin{subfigure}[t]{0.58\linewidth}
+\hfill
+\begin{subfigure}[t]{0.319\textwidth}
     \centering
     \includegraphics[width=\linewidth]{results/figures/fig_ddr_xes3g5m.pdf}
     \caption{XES3G5M}
@@ -493,34 +632,34 @@ into four distinct regimes:
 $\DDR(\text{attr\_mask})=0 < \DDR(\text{subgraph}) <
 \DDR(\text{edge\_drop}) \approx p < \DDR(\text{node\_drop})$.}
 \label{fig:ddr-all}
-\end{figure}
+\end{figure*}
 
 \begin{table}[t]
 \centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
 \caption{Mean \DDR{} across three seeds and three train folds for the four augmentation
 families and four perturbation strengths. Subgraph sampling is
 random-walk based (Section~\ref{sec:ddr}). Lower is less disruptive;
 $0.000$ for attribute masking is by construction.}
 \label{tab:ddr-raw}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{l l c c c c}
+\begin{tabular}{@{}>{\RaggedRight\arraybackslash}p{18mm}>{\ttfamily\footnotesize\raggedright\arraybackslash}p{20mm}cccc@{}}
 \toprule
-Dataset & Augmentation
-& $p{=}0.05$ & $p{=}0.10$ & $p{=}0.20$ & $p{=}0.30$ \\
+Dataset & Family & \makecell{$p{=}0.05$} & \makecell{$p{=}0.10$} & \makecell{$p{=}0.20$} & \makecell{$p{=}0.30$} \\
 \midrule
-\multirow{4}{*}{Junyi}
+\multirow{4}{*}{\makecell[l]{Junyi\\Academy}}
  & attr\_mask  & 0.000 & 0.000 & 0.000 & 0.000 \\
  & subgraph    & 0.013 & 0.063 & 0.161 & 0.266 \\
  & edge\_drop  & 0.050 & 0.094 & 0.200 & 0.301 \\
  & node\_drop  & 0.107 & 0.196 & 0.384 & 0.523 \\
 \midrule
-\multirow{4}{*}{ASSIST 2012}
+\multirow{4}{*}{\makecell[l]{ASSISTments\\2012}}
  & attr\_mask  & 0.000 & 0.000 & 0.000 & 0.000 \\
  & subgraph    & 0.012 & 0.028 & 0.071 & 0.188 \\
  & edge\_drop  & 0.055 & 0.100 & 0.212 & 0.309 \\
  & node\_drop  & 0.092 & 0.193 & 0.389 & 0.530 \\
 \midrule
-\multirow{4}{*}{XES3G5M}
+\multirow{4}{*}{\makecell[l]{XES3G5M}}
  & attr\_mask  & 0.000 & 0.000 & 0.000 & 0.000 \\
  & subgraph    & 0.022 & 0.058 & 0.145 & 0.240 \\
  & edge\_drop  & 0.049 & 0.095 & 0.204 & 0.299 \\
@@ -602,6 +741,35 @@ On ASSISTments, GIKT slightly trails simpleKT but edges out DKT and
 AKT; on XES3G5M the ordering below simpleKT is GIKT, DKT, and AKT in a
 narrow band. GKT remains the weaker graph-augmented baseline across the
 three benchmarks.
+
+\subsection{Graph Construction Ablation (Train-only vs.\ Full Log)}
+\label{sec:exp-graph-ablation}
+To isolate the channel hypothesised in H1 (Section~\ref{sec:exp-fextra}),
+we contrast graph smoothing using fold-specific train-only exports
+(\path{e\_pre\_train\_only.csv}, \path{e\_sim\_train\_only.csv}) against a
+\emph{single} prerequisite/similarity graph inferred from the entire
+preprocessed interaction table (\path{data/processed/<dataset>/full\_log/}),
+ignoring learner splits before edge inference.
+All other protocol choices---including the learner-based split used for
+evaluation---remain unchanged; only the static graph artefact fed into the
+graph branch of the diagnostic ensemble differs.
+\input{results/tables/graph_ablation.tex}
+Table~\ref{tab:graph-ablation} reports mean AUC/ACC over three folds for
+GKT and GIKT only, contrasting fold-wise train-only graphs against a single
+full-log graph inferred before splitting while keeping evaluation splits fixed.
+In the released three-fold means, $\Delta$AUC and $\Delta$ACC round to zero at
+three decimal places for both models on all three benchmarks, so changing only
+the static graph artefact does not move headline discrimination or accuracy in
+this diagnostic stack at the reported precision.
+We interpret this null shift cautiously: prerequisite/similarity inference may be
+insensitive to pooling additional learners under our thresholds, the graph branch
+may saturate, or differences may appear below rounding precision or under other
+backbones.
+The experiment nonetheless shows that train-only construction is \emph{not}
+penalising headline metrics relative to this deliberate full-log variant in our
+released configuration, and that the comparison is reproducible from the
+companion scripts. It does not replicate any specific prior implementation.
+
 \subsection{Ground-Truth Cross-Validation on Junyi}
 \label{sec:exp-gtxv}
 Junyi Academy~\cite{junyi_dataset} is the only benchmark in our study
@@ -754,6 +922,16 @@ provenance logging. The reduced relative advantage of graph-augmented
 models in our setting is consistent with the hypothesis that part of
 the gains reported in prior literature reflects this leakage rather
 than the structural information itself.
+Table~\ref{tab:graph-ablation} instantiates the controlled comparison suggested by H1:
+identical learner splits and evaluation code, but graph statistics pooled over the full
+preprocessed log before edge inference.
+In our run, GKT/GIKT headline metrics are unchanged at three decimals relative to
+train-only graphs, so this diagnostic does \emph{not} exhibit a ``metric jump when the
+graph sees the whole log'' at coarse precision.
+H1 remains relevant as a risk statement about workflows that leak held-out mass into
+graph construction in general; architectures or inference rules that exploit
+cross-split pooling more aggressively might still show larger shifts, and the ablation
+should be revisited when those components change.
 
 \paragraph{H2 -- Aggregate-metric masking.}
 Aggregate AUC averages over the full concept-frequency distribution.
@@ -778,18 +956,24 @@ These three hypotheses are not exhaustive and are not mutually
 exclusive. Distinguishing among them requires a controlled re-run of
 prior graph-KT papers under our protocol, which is beyond the scope
 of this paper. The observation we make here is narrower:
-\emph{under leakage-controlled evaluation, the absolute ranking
-between graph-augmented and sequence-only KT is sensitive to
-graph-construction discipline}, and benchmarking practice should
-treat this sensitivity as a first-order experimental factor.
+\emph{under leakage-controlled evaluation, the absolute ranking between
+graph-augmented and sequence-only KT can differ from settings that pool graph
+evidence across splits}, and benchmarking practice should treat graph provenance
+as a first-order experimental factor.
+Separately, the train-only versus full-log ablation for GKT/GIKT
+(Table~\ref{tab:graph-ablation}) shows no headline metric shift at three decimals,
+which constrains how strongly one can infer leakage \emph{magnitude} from this
+particular diagnostic alone.
 
 \paragraph{Why this strengthens the protocol.}
 If graph-augmented KT models reliably outperformed sequence-only
-baselines regardless of graph-construction discipline, leakage control
-would be a useful but secondary concern. The observation that the
-ranking changes under leakage control elevates leakage control from a
-hygiene step to a benchmarking precondition. Combined with the
-ground-truth cross-validation finding of Section~\ref{sec:exp-gtxv}
+baselines regardless of graph provenance, leakage control would be a
+useful but secondary concern.
+The observation that sequence-only baselines match or exceed our instantiated
+GKT/GIKT under train-only graphs, together with explicit auditing of edge
+provenance, elevates leakage control from a hygiene step to a benchmarking
+precondition.
+Combined with the ground-truth cross-validation finding of Section~\ref{sec:exp-gtxv}
 that inferred and expert prerequisite signals are structurally
 distinct, this argues that graph quality cannot be assumed---it must
 be audited.
@@ -870,7 +1054,7 @@ metric family used in Section~\ref{sec:exp-gtxv}. Without these
 reports, an aggregate-AUC improvement is difficult to attribute. The
 protocol presented here makes (a), (b), and (d) tractable.
 \paragraph{Limitations.}
-This version has five limitations.
+This version has six limitations.
 First, diagnostic KT baselines are reported as means over three folds
 with bootstrap confidence intervals, whereas DAG audit summaries and
 Junyi ground-truth cross-validation refer to fold~0 exports by default.
@@ -899,6 +1083,11 @@ did not sweep the prerequisite-score threshold $\theta$; the reported
 numbers use $\theta=0.5$ and retain the full Chang annotation.
 Fifth, calibration analysis and formal AUC comparison procedures are
 deferred to future work.
+Sixth, the train-only versus full-log graph ablation
+(Table~\ref{tab:graph-ablation}) moves headline GKT/GIKT metrics by less than
+$0.001$ AUC/ACC at three-decimal precision on all three benchmarks; we do not
+claim that other architectures, metrics, or inference rules would exhibit the
+same null shift.
 %-----------------------------------------------------------------------------
 \section{Conclusion}
 \label{sec:concl}
@@ -952,7 +1141,7 @@ We use only public KT benchmarks under their respective licences. No
 personally identifiable information is used, and no claims about real
 learning outcomes are made.
 %=============================================================================
-\bibliographystyle{splncs04}
+\bibliographystyle{IEEEtran}
 \bibliography{refs}
 %=============================================================================
 \end{document}

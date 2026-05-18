@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import logging
 import random
+from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -65,15 +66,18 @@ def learner_based_folds(
     ratios: tuple[float, float, float],
     split_cfg: dict | None = None,
     default_seed: int = 42,
-) -> list[tuple[int, int, dict[str, pd.DataFrame]]]:
-    """Create deterministic learner-based folds as repeated seeded splits."""
-    folds = []
+) -> Iterator[tuple[int, int, dict[str, pd.DataFrame]]]:
+    """Yield one fold at a time (train/valid/test shards) to bound peak RAM.
+
+    Building every fold upfront materialises ``n_folds`` full copies of the
+    interaction table; large benchmarks would OOM. Consumers should iterate once
+    and drop references to each ``splits`` dict before the next yield.
+    """
     for fold, seed in enumerate(fold_seeds(split_cfg, default_seed=default_seed)):
         splits = learner_based_split(df, ratios, seed=seed)
         for part in splits.values():
             part["fold"] = fold
-        folds.append((fold, seed, splits))
-    return folds
+        yield fold, seed, splits
 
 
 def assert_no_user_overlap(splits: dict) -> None:

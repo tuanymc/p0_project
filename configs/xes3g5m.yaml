@@ -26,6 +26,9 @@ graph:
   e_sim_method: jaccard
   e_sim_threshold: 0.10
   e_sim_top_k_per_node: 20
+graph_ablation:
+  enabled: true
+  models: [gkt, gikt, skt, dygkt, dgekt]
 augmentation:
   methods: [node_drop, edge_drop, attr_mask, subgraph]
   ps: [0.05, 0.10, 0.20, 0.30]
@@ -45,6 +48,12 @@ baselines:
   - name: gkt
     enabled: true
   - name: gikt
+    enabled: true
+  - name: skt
+    enabled: true
+  - name: dygkt
+    enabled: true
+  - name: dgekt
     enabled: true
 logging:
   level: INFO

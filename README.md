@@ -21,7 +21,7 @@ Graph Construction and Cold-Start Diagnostic Protocol for Knowledge Tracing*
 1. [Quick start](#1-quick-start)
 2. [Environment setup](#2-environment-setup)
 3. [Data download and preparation](#3-data-download-and-preparation)
-4. [Running the full pipeline (all benchmarks)](#4-running-the-full-pipeline-all-benchmarks)
+4. [Running experiments](#4-running-experiments)
 5. [Per-stage commands](#5-per-stage-commands) ([graph_builder API](#51-graph_builder-python-api))
 6. [Outputs and where they live](#6-outputs-and-where-they-live)
 7. [Paper artefacts and LaTeX paths](#7-paper-artefacts-and-latex-paths)
@@ -50,7 +50,7 @@ bash scripts/run_junyi_minimal.sh
 
 If you do not have Git Bash/WSL, run the same stages by hand (see
 [§5](#5-per-stage-commands)); or use `scripts/run_all_datasets_full.ps1` for
-everything including paper tables (see [§4](#4-running-the-full-pipeline-all-benchmarks)).
+everything including paper tables (see [§4](#4-running-experiments)).
 
 **Runtime.** Roughly tens of minutes on a laptop CPU for Junyi end-to-end if
 deep baselines (`torch`) are enabled; longer for full three-dataset runs and
@@ -161,12 +161,42 @@ Stop and fix any learner overlap or temporal violations before continuing.
 
 ---
 
-## 4. Running the full pipeline (all benchmarks)
+## 4. Running experiments
 
-End-to-end on **Junyi, ASSISTments 2012, and XES3G5M**: preprocess (unless
-parquet already exists), split check, graph build, DAG audit, DDR sweep,
-baseline runner, cold-start report, **`scripts/generate_paper_artifacts.py`**,
-and aggregated markdown report.
+Use this section to reproduce paper-facing numbers and optional ablations.
+Always run commands from the **repository root** with the venv that has
+`pip install -e .` applied.
+
+### 4.1 Experiment map
+
+| Goal | Command | Main artefacts |
+|------|---------|------------------|
+| **Full protocol** (preprocess → graphs → DDR → baselines → cold-start → TeX) | `scripts/run_all_datasets_full.sh` or `scripts/run_all_datasets_full.ps1` | `results/tables/*.csv`/`.tex`, `results/figures/fig_ddr_*.pdf`, `results/reports/p0_diagnostic_report.md` |
+| **Smoke / one dataset** | `scripts/run_*_minimal.sh` | Same layout under `data/processed/<dataset>/` and `results/` for that config |
+| **Graph ablation** (train-only vs full-log graphs, graph-augmented diagnostics) | `scripts/run_graph_ablation_experiment.sh` or `scripts/run_graph_ablation_experiment.ps1` | `results/tables/graph_ablation_summary.csv`, `graph_ablation.tex`; see `scripts/GRAPH_ABLATION_EXPERIMENT.md` |
+| **Junyi GT vs expert DAG** | `python scripts/run_gt_cross_validation_junyi.py` | `results/gt_validation/junyi/*` |
+| **Paper tables only** (CSVs already produced) | `python scripts/generate_paper_artifacts.py` | Regenerates `\input{results/tables/...}` snippets |
+
+**Leakage diagnostics** (`ECR_flag`, `ECR_overlap`, `EOC`, `TBVR`) are written to
+`results/tables/leakage_metrics.csv` when you run **`python -m src.graph_builder`**
+(or console **`p0-graph-build`** after editable install). Fold means are typeset
+via `generate_paper_artifacts.py` → `results/tables/leakage_metrics.tex`.
+
+### 4.2 Full pipeline (all benchmarks)
+
+End-to-end on **Junyi, ASSISTments 2012, and XES3G5M**, **per dataset**, in order:
+
+1. `preprocess` (skipped if the dataset parquet exists unless forced)
+2. `split_checker`
+3. `graph_builder` (fold-wise train-only graphs + leakage row merge)
+4. `export_full_log_graph` (full-log prerequisite/similarity exports for ablations / `graph_construction` contrasts)
+5. `dag_audit`
+6. `dag_disruption`
+7. `baseline_runner` — on **Junyi**, `run_all_datasets_full.ps1` appends **`--skip-cold-start`** to limit RAM (cold-start strata skipped; AUC/ACC/NLL still run on val+test). The Bash script calls the baseline **without** that flag; if Junyi exhausts memory on Linux/macOS, rerun step 7 manually with `--skip-cold-start` for `configs/junyi.yaml` only.
+8. `cold_start_report`
+
+Then globally: **`scripts/generate_paper_artifacts.py`** and
+**`python -m src.report_generator --out results/reports/`**.
 
 **Linux / macOS (Git Bash):**
 
@@ -191,15 +221,35 @@ Minimal per-dataset scripts (no cross-dataset paper aggregation):
 - `scripts/run_assist_minimal.sh`
 - `scripts/run_xes3g5m_minimal.sh`
 
-Regenerate **DDR line plots only** (three PDFs under `results/figures/`):
+### 4.3 Graph ablation (train-only vs full-log, H1)
+
+After parquet exists (from preprocess or the full pipeline), run:
+
+```bash
+chmod +x scripts/run_graph_ablation_experiment.sh
+SERVER_PROFILE=1 ./scripts/run_graph_ablation_experiment.sh
+```
+
+```powershell
+.\scripts\run_graph_ablation_experiment.ps1 -ServerProfile
+```
+
+Requires `graph_ablation.enabled: true` and a `models` list (e.g.\ GKT, GIKT, SKT, DyGKT, DGEKT) in each
+`configs/*.yaml`. Full prerequisites, flags (`-SkipGraphBuild`, Junyi RAM notes),
+and output filenames are documented in **`scripts/GRAPH_ABLATION_EXPERIMENT.md`**.
+
+### 4.4 DDR figures only
+
+Regenerate the three DDR line PDFs under `results/figures/`:
 
 ```bash
 bash scripts/make_all_figures.sh
 ```
 
-**Optional — Junyi ground-truth cross-validation** (train-only inferred
-`e_pre_train_only.csv` vs expert DAG; requires preprocess/graph so that
-`data/processed/junyi/kc_name_to_id.json` exists):
+### 4.5 Junyi ground-truth cross-validation
+
+Train-only inferred `e_pre_train_only.csv` vs expert DAG; requires preprocess/graph so that
+`data/processed/junyi/kc_name_to_id.json` exists:
 
 ```bash
 python scripts/run_gt_cross_validation_junyi.py
@@ -223,9 +273,10 @@ Typical order for one config (e.g. `configs/junyi.yaml`):
 python -m src.preprocess          --config configs/junyi.yaml
 python -m src.split_checker       --config configs/junyi.yaml
 python -m src.graph_builder       --config configs/junyi.yaml
+python -m src.export_full_log_graph --config configs/junyi.yaml
 python -m src.dag_audit           --config configs/junyi.yaml
 python -m src.dag_disruption      --config configs/junyi.yaml
-python -m src.baseline_runner     --config configs/junyi.yaml
+python -m src.baseline_runner     --config configs/junyi.yaml   # add --skip-cold-start on Junyi if RAM-limited
 python -m src.cold_start_report   --config configs/junyi.yaml
 ```
 
@@ -238,10 +289,14 @@ python -m src.report_generator --out results/reports/
 ```
 
 Most modules accept `--seed` (default `42`) and `--log-level` (`INFO` default).
+After `pip install -e .`, optional CLI aliases such as `p0-graph-build` and
+`p0-baseline` are defined in `pyproject.toml` and mirror the same flags as
+`python -m src.graph_builder` / `src.baseline_runner`.
 
 Fold-specific graph exports live under
 `data/processed/<dataset>/fold_<k>/` (e.g. `e_pre_train_only.csv`,
-`e_sim_train_only.csv`).
+`e_sim_train_only.csv`). Full-log ablation graphs (when exported) live under
+`data/processed/<dataset>/full_log/`.
 
 ### 5.1 `graph_builder` Python API
 
@@ -275,6 +330,8 @@ See `tests/test_graph_builder_train_only.py` for examples.
 | `data/processed/<ds>/fold_*/e_sim_train_only.csv` | `graph_builder` | Train-only similarity edges |
 | `results/tables/dataset_stats.csv` (+ `.tex`) | `generate_paper_artifacts.py` | Dataset scale summary |
 | `results/tables/graph_stats.csv` | `graph_builder` | Per-fold edge / KC counts |
+| `results/tables/leakage_metrics.csv` (+ `.tex`) | `graph_builder` + `generate_paper_artifacts.py` | Fold-wise leakage diagnostics (`ECR_flag`, `ECR_overlap`, …); TeX is fold-mean summary |
+| `results/tables/graph_ablation_summary.csv` (+ `.tex`) | `baseline_runner` with `graph_ablation` + artefacts script | Train-only vs full-log graph-augmented diagnostics (models from YAML) |
 | `results/tables/dag_audit_summary.csv` (+ `.tex`) | Manual / pipeline notes | Fold-wise DAG audit rows (`dag_audit` writes CSV) |
 | `results/reports/<dataset>_dag_report.md` | `dag_audit` | Human-readable audit |
 | `results/reports/<dataset>_dag_pruning_log.csv` | `dag_audit` | Pruned edges trail |
@@ -297,8 +354,8 @@ See `tests/test_graph_builder_train_only.py` for examples.
 
 - **Manuscript:** `paper/main.tex`, bibliography `paper/refs.bib`.
 - **Inputs pulled from `results/`:** `\input{results/tables/dataset_stats.tex}`,
-  `dag_audit_summary.tex`, `cold_start_by_stratum.tex`, `baseline_results.tex`,
-  and GT material under `results/gt_validation/junyi/` (see `main.tex`).
+  `leakage_metrics.tex`, `dag_audit_summary.tex`, `cold_start_by_stratum.tex`,
+  `baseline_results.tex`, `graph_ablation.tex` (when generated), and GT material under `results/gt_validation/junyi/` (see `main.tex`).
 - **Build tip:** compile LaTeX with the **repository root** as the working
   directory so paths such as `results/tables/...` and `results/figures/...`
   resolve. Figures `fig_ddr_*.pdf` appear after running `dag_disruption` (or
@@ -308,8 +365,9 @@ See `tests/test_graph_builder_train_only.py` for examples.
 Regeneration recipe aligned with the README scripts:
 
 1. `./scripts/run_all_datasets_full.sh --server` (or the `.ps1` equivalent).  
-2. `python scripts/run_gt_cross_validation_junyi.py` (optional).  
-3. `latexmk` / `pdflatex` from repo root on `paper/main.tex`.
+2. Optional H1 graph ablation: `SERVER_PROFILE=1 ./scripts/run_graph_ablation_experiment.sh` or `.\scripts\run_graph_ablation_experiment.ps1 -ServerProfile`, then `python scripts/generate_paper_artifacts.py`.  
+3. `python scripts/run_gt_cross_validation_junyi.py` (optional).  
+4. `latexmk` / `pdflatex` from repo root on `paper/main.tex`.
 
 ---
 
@@ -334,6 +392,10 @@ for each dataset, or `bash scripts/make_all_figures.sh`.
 
 **Baseline RAM / time** — Reduce folds in YAML (`split.n_folds`) or disable
 heavy models in `configs/*.yaml` under `baselines:` while debugging structure-only stages.
+
+**Junyi baseline RAM (Linux/macOS full pipeline)** — `scripts/run_all_datasets_full.sh` invokes `baseline_runner` without `--skip-cold-start`; Windows `run_all_datasets_full.ps1` adds `--skip-cold-start` for Junyi.
+If you hit OOM on Bash/WSL, rerun only that stage:
+`python -m src.baseline_runner --config configs/junyi.yaml --skip-cold-start`.
 
 ---
 
@@ -361,6 +423,7 @@ p0_project/
 │   ├── dag_audit.py
 │   ├── dag_disruption.py
 │   ├── cold_start_report.py
+│   ├── export_full_log_graph.py
 │   ├── baseline_runner.py
 │   ├── gt_cross_validation.py
 │   ├── report_generator.py
@@ -371,6 +434,9 @@ p0_project/
 │   ├── run_xes3g5m_minimal.sh
 │   ├── run_all_datasets_full.sh
 │   ├── run_all_datasets_full.ps1
+│   ├── run_graph_ablation_experiment.sh
+│   ├── run_graph_ablation_experiment.ps1
+│   ├── GRAPH_ABLATION_EXPERIMENT.md
 │   ├── make_all_figures.sh
 │   ├── generate_paper_artifacts.py
 │   ├── run_gt_cross_validation_junyi.py

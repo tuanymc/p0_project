@@ -1,0 +1,16 @@
+\begin{table}[t]
+\centering
+\caption{Direct leakage diagnostics per dataset (fold mean where multiple folds are present). \textsc{ECR}\textsubscript{flag}: learner-overlap structural indicator (Eq.~\ref{eq:ecr-flag}; $0$ confirms disjoint learners across train/validation/test under each fold). \textsc{ECR}\textsubscript{overlap}: held-out pattern overlap rate over retained edges (Eq.~\ref{eq:ecr-overlap}). \textsc{EOC}: Edge--Outcome Correlation Frobenius norm (Eq.~\ref{eq:eoc}); \textsc{TBVR}: Temporal Boundary Violation Rate within train timelines (Eq.~\ref{eq:tbvr}, indexed boundary). Values are exported by \texttt{p0-graph-build} into \texttt{results/tables/leakage\_metrics.csv}. Under learner-disjoint folds, $\textsc{ECR}\textsubscript{flag}{=}0$ on every run---confirming structural leakage freedom at the split level; \textsc{ECR}\textsubscript{overlap} can remain near~$1$ on dense logs because recurrent transition patterns reappear across disjoint held-out learners (diagnostic overlap, not \texttt{train\_only\_flag} violation).}
+\label{tab:leakage-metrics}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Dataset & \textsc{ECR}\textsubscript{flag} & \textsc{ECR}\textsubscript{overlap} & \textsc{EOC} & \textsc{TBVR} \\
+\midrule
+ASSISTments 2012 & 0.000 & 1.000 & 1.423 & 0.201 \\
+Junyi Academy & 0.000 & 1.000 & 1.449 & 0.176 \\
+XES3G5M & 0.000 & 0.988 & 1.420 & 0.756 \\
+\bottomrule
+\end{tabular}
+\end{table}

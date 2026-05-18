@@ -31,7 +31,7 @@ split:
   type: learner_temporal     # learner_based + temporal ordering
   ratios: [0.7, 0.1, 0.2]    # train / valid / test
   seed: 42
-  n_folds: 3                 # set to 1 for a single split; >1 enables CV
+  n_folds: 3                 # folds are streamed one-at-a-time (see learner_based_folds); use 1 if RAM is still tight
 
 # --- Train-only graph construction ---
 graph:
@@ -84,6 +84,16 @@ baselines:
     enabled: true
   - name: gikt
     enabled: true
+  - name: skt
+    enabled: true
+  - name: dygkt
+    enabled: true
+  - name: dgekt
+    enabled: true
+
+graph_ablation:
+  enabled: true
+  models: [gkt, gikt, skt, dygkt, dgekt]
 
 # --- Logging ---
 logging:

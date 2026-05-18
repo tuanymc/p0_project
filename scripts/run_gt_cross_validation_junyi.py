@@ -47,11 +47,13 @@ def _write_tex_table(sweep: pd.DataFrame, n_expert_edges: int, path: Path, datas
     subset = sweep[sweep["top_k"].isin(want_k)].copy()
     subset = subset.sort_values("top_k")
     for _, r in subset.iterrows():
-        label = str(int(r["top_k"]))
-        if int(r["top_k"]) == n_expert_edges:
-            label = f"$|$expert$|$ = {n_expert_edges}"
-        if int(r["top_k"]) == 5000:
+        tk = int(r["top_k"])
+        if tk == n_expert_edges:
+            label = rf"\makecell[l]{{$\lvert E_\mathrm{{expert}}\rvert={n_expert_edges}$}}"
+        elif tk == 5000:
             label = r"5000 (cap)"
+        else:
+            label = str(tk)
         rows_tex.append(
             f"{label} & {r['edge_precision']:.3f} & {r['edge_recall']:.3f} & "
             f"{r['direction_agreement']:.3f} & {r['reachability_f1']:.3f} " + r"\\"
@@ -64,13 +66,16 @@ def _write_tex_table(sweep: pd.DataFrame, n_expert_edges: int, path: Path, datas
         rf"$E_{{\text{{pre}}}}$ and expert prerequisite DAG on {dataset_label} "
         rf"($|E|={n_expert_edges}$ directed edges).}}" + "\n"
         r"\label{tab:gt-validation}" + "\n"
-        r"\begin{tabular}{l c c c c}" + "\n"
+        r"\footnotesize" + "\n"
+        r"\setlength{\tabcolsep}{2pt}" + "\n"
+        r"\begin{tabularx}{\linewidth}{@{} >{\RaggedRight\arraybackslash}X cccc @{}}" + "\n"
         r"\toprule" + "\n"
-        r"$K$ (top inferred edges) & Edge Prec.\ & Edge Rec.\ & Direction Agr.\ & Reachability F1 \\" + "\n"
+        r"\makecell[l]{$K$ (top inferred)} & \makecell{Edge\\prec.} & \makecell{Edge\\rec.} & "
+        r"\makecell{Dir.\\agr.} & \makecell{Rch.\\F1} \\" + "\n"
         r"\midrule" + "\n"
         f"{body}\n"
         r"\bottomrule" + "\n"
-        r"\end{tabular}" + "\n"
+        r"\end{tabularx}" + "\n"
         r"\end{table}" + "\n"
     )
     path.write_text(content, encoding="utf-8")

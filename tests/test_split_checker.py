@@ -38,7 +38,7 @@ def test_learner_based_folds_tags_each_split_with_fold():
         "correct": [0, 1] * 5,
     })
 
-    folds = learner_based_folds(df, (0.6, 0.2, 0.2), {"seed": 42, "n_folds": 2})
+    folds = list(learner_based_folds(df, (0.6, 0.2, 0.2), {"seed": 42, "n_folds": 2}))
 
     assert [fold for fold, _seed, _splits in folds] == [0, 1]
     for fold, _seed, splits in folds:

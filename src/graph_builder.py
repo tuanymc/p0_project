@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gc
 import itertools
 import logging
 from pathlib import Path
@@ -17,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 from src.io_utils import AUDIT_COLUMNS, dump_csv, load_interactions, load_yaml
+from src.leakage_metrics import compute_leakage_row, merge_leakage_metrics_csv
 from src.split_checker import learner_based_folds
 
 logger = logging.getLogger(__name__)
@@ -30,28 +32,40 @@ def _assert_train_only(train: pd.DataFrame) -> None:
         assert values <= {"train"}, "Graph construction must receive train rows only."
 
 
+def build_q_matrix_from_interactions(interactions: pd.DataFrame) -> pd.DataFrame:
+    """Build an item--KC table from any canonical interaction frame."""
+    logger.info("Building Q-matrix from interactions shape=%s", interactions.shape)
+    q = interactions[["item_id", "kc_id"]].drop_duplicates().sort_values(["item_id", "kc_id"]).reset_index(drop=True)
+    logger.info("Built Q-matrix shape=%s", q.shape)
+    return q
+
+
 def build_q_matrix_from_train(train: pd.DataFrame) -> pd.DataFrame:
     """Build an item-KC table from train interactions only."""
     logger.info("Building Q-matrix from train shape=%s", train.shape)
     _assert_train_only(train)
-    q_train = train[["item_id", "kc_id"]].drop_duplicates().sort_values(["item_id", "kc_id"]).reset_index(drop=True)
-    logger.info("Built Q-matrix shape=%s", q_train.shape)
-    return q_train
+    return build_q_matrix_from_interactions(train)
 
 
-def infer_similarity_edges_from_train(
-    train: pd.DataFrame,
-    q_train: pd.DataFrame,
+def infer_similarity_edges_from_q_matrix(
+    q_matrix: pd.DataFrame,
     method: Literal["jaccard", "pmi"] = "jaccard",
     threshold: float = 0.1,
+    *,
+    source_prefix: str = "train",
 ) -> pd.DataFrame:
-    """Infer KC similarity edges from train-fold co-occurrence only."""
-    logger.info("Inferring similarity edges train_shape=%s q_shape=%s method=%s threshold=%s", train.shape, q_train.shape, method, threshold)
-    _assert_train_only(train)
+    """Infer KC similarity edges from an item--KC co-occurrence table."""
+    logger.info(
+        "Inferring similarity edges q_shape=%s method=%s threshold=%s source_prefix=%s",
+        q_matrix.shape,
+        method,
+        threshold,
+        source_prefix,
+    )
     if method not in {"jaccard", "pmi"}:
         raise ValueError("method must be 'jaccard' or 'pmi'")
-    item_sets = q_train.groupby("kc_id")["item_id"].apply(lambda s: set(s.astype(int))).to_dict()
-    n_items = max(1, q_train["item_id"].nunique())
+    item_sets = q_matrix.groupby("kc_id")["item_id"].apply(lambda s: set(s.astype(int))).to_dict()
+    n_items = max(1, q_matrix["item_id"].nunique())
     edges: list[dict[str, object]] = []
     for src, dst in itertools.permutations(sorted(item_sets), 2):
         inter = len(item_sets[src] & item_sets[dst])
@@ -66,10 +80,87 @@ def infer_similarity_edges_from_train(
             p_y = len(item_sets[dst]) / n_items
             weight = float(np.log(p_xy / (p_x * p_y))) if p_x and p_y and p_xy else 0.0
         if weight >= threshold:
-            edges.append({"src_kc": src, "dst_kc": dst, "weight": weight, "source": f"train_{method}"})
+            edges.append({"src_kc": src, "dst_kc": dst, "weight": weight, "source": f"{source_prefix}_{method}"})
     result = pd.DataFrame(edges, columns=["src_kc", "dst_kc", "weight", "source"])
     logger.info("Inferred similarity edges shape=%s", result.shape)
     return result
+
+
+def infer_similarity_edges_from_train(
+    train: pd.DataFrame,
+    q_train: pd.DataFrame,
+    method: Literal["jaccard", "pmi"] = "jaccard",
+    threshold: float = 0.1,
+) -> pd.DataFrame:
+    """Infer KC similarity edges from train-fold co-occurrence only."""
+    logger.info("Inferring similarity edges train_shape=%s q_shape=%s method=%s threshold=%s", train.shape, q_train.shape, method, threshold)
+    _assert_train_only(train)
+    return infer_similarity_edges_from_q_matrix(q_train, method=method, threshold=threshold, source_prefix="train")
+
+
+def infer_prerequisites_from_interactions(
+    interactions: pd.DataFrame,
+    q_matrix: pd.DataFrame,
+    max_edges: int = 5000,
+    top_k_per_node: int = 10,
+    support_quantile: float = 0.90,
+    *,
+    source_tag: str = "temporal_precedence",
+) -> pd.DataFrame:
+    """Infer prerequisite edges from temporal KC transitions on ``interactions``."""
+    logger.info(
+        "Inferring prerequisite edges interactions_shape=%s q_shape=%s source=%s",
+        interactions.shape,
+        q_matrix.shape,
+        source_tag,
+    )
+    transitions = []
+    for _user_id, part in interactions.groupby("user_id", sort=False):
+        ordered_part = part.sort_values("timestamp")
+        kcs = ordered_part["kc_id"].to_numpy()
+        if len(kcs) < 2:
+            continue
+        src = kcs[:-1]
+        dst = kcs[1:]
+        mask = src != dst
+        if mask.any():
+            transitions.append(pd.DataFrame({"src_kc": src[mask], "dst_kc": dst[mask]}))
+    if not transitions:
+        return pd.DataFrame(columns=["src_kc", "dst_kc", "weight", "source"])
+    counts = pd.concat(transitions, ignore_index=True).value_counts(["src_kc", "dst_kc"]).rename("support").reset_index()
+    min_support = max(2, int(np.ceil(counts["support"].quantile(support_quantile)))) if len(counts) > 10 else 1
+    edges = counts[counts["support"] >= min_support].copy()
+    if edges.empty:
+        edges = counts.nlargest(min(200, len(counts)), "support").copy()
+    edges = edges.sort_values(["src_kc", "support"], ascending=[True, False])
+    edges = edges.groupby("src_kc", group_keys=False).head(top_k_per_node)
+    edges = edges.nlargest(min(max_edges, len(edges)), "support").copy()
+    max_support = max(1, edges["support"].max())
+    edges["weight"] = edges["support"] / max_support
+    edges["source"] = source_tag
+    result = edges[["src_kc", "dst_kc", "weight", "source"]].sort_values(["src_kc", "dst_kc"]).reset_index(drop=True)
+    logger.info("Inferred prerequisite edges shape=%s min_support=%s", result.shape, min_support)
+    return result
+
+
+def infer_prerequisites_from_train(
+    train: pd.DataFrame,
+    q_train: pd.DataFrame,
+    max_edges: int = 5000,
+    top_k_per_node: int = 10,
+    support_quantile: float = 0.90,
+) -> pd.DataFrame:
+    """Infer prerequisite edges from train-only temporal KC transitions."""
+    logger.info("Inferring prerequisite edges train_shape=%s q_shape=%s", train.shape, q_train.shape)
+    _assert_train_only(train)
+    return infer_prerequisites_from_interactions(
+        train,
+        q_train,
+        max_edges=max_edges,
+        top_k_per_node=top_k_per_node,
+        support_quantile=support_quantile,
+        source_tag="train_temporal_precedence",
+    )
 
 
 def evaluate_inferred_against_ground_truth(
@@ -130,45 +221,6 @@ def evaluate_inferred_against_ground_truth(
     return pd.DataFrame(rows)
 
 
-def infer_prerequisites_from_train(
-    train: pd.DataFrame,
-    q_train: pd.DataFrame,
-    max_edges: int = 5000,
-    top_k_per_node: int = 10,
-    support_quantile: float = 0.90,
-) -> pd.DataFrame:
-    """Infer prerequisite edges from train-only temporal KC transitions."""
-    logger.info("Inferring prerequisite edges train_shape=%s q_shape=%s", train.shape, q_train.shape)
-    _assert_train_only(train)
-    transitions = []
-    for _user_id, part in train.groupby("user_id", sort=False):
-        ordered_part = part.sort_values("timestamp")
-        kcs = ordered_part["kc_id"].to_numpy()
-        if len(kcs) < 2:
-            continue
-        src = kcs[:-1]
-        dst = kcs[1:]
-        mask = src != dst
-        if mask.any():
-            transitions.append(pd.DataFrame({"src_kc": src[mask], "dst_kc": dst[mask]}))
-    if not transitions:
-        return pd.DataFrame(columns=["src_kc", "dst_kc", "weight", "source"])
-    counts = pd.concat(transitions, ignore_index=True).value_counts(["src_kc", "dst_kc"]).rename("support").reset_index()
-    min_support = max(2, int(np.ceil(counts["support"].quantile(support_quantile)))) if len(counts) > 10 else 1
-    edges = counts[counts["support"] >= min_support].copy()
-    if edges.empty:
-        edges = counts.nlargest(min(200, len(counts)), "support").copy()
-    edges = edges.sort_values(["src_kc", "support"], ascending=[True, False])
-    edges = edges.groupby("src_kc", group_keys=False).head(top_k_per_node)
-    edges = edges.nlargest(min(max_edges, len(edges)), "support").copy()
-    max_support = max(1, edges["support"].max())
-    edges["weight"] = edges["support"] / max_support
-    edges["source"] = "train_temporal_precedence"
-    result = edges[["src_kc", "dst_kc", "weight", "source"]].sort_values(["src_kc", "dst_kc"]).reset_index(drop=True)
-    logger.info("Inferred prerequisite edges shape=%s min_support=%s", result.shape, min_support)
-    return result
-
-
 def load_ground_truth_dag(dataset_name: str) -> pd.DataFrame:
     """Load an independent prerequisite DAG for datasets that provide one."""
     logger.info("Loading ground-truth DAG for dataset=%s", dataset_name)
@@ -227,6 +279,8 @@ def main() -> None:
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level.upper()))
+    if hasattr(pd.options.mode, "copy_on_write"):
+        pd.options.mode.copy_on_write = True
 
     cfg = load_yaml(args.config)
     dataset = cfg["dataset"]
@@ -234,6 +288,8 @@ def main() -> None:
     ratios = tuple(cfg.get("split", {}).get("ratios", [0.7, 0.1, 0.2]))
     graph_cfg = cfg.get("graph", {})
     stats_rows = []
+    leakage_rows: list[dict[str, float | int | str]] = []
+    train_ratio = float(ratios[0]) if ratios else 0.7
     for fold, split_seed, splits in learner_based_folds(df, ratios, cfg.get("split", {}), default_seed=args.seed):
         train = splits["train"].copy()
         train["split"] = "train"
@@ -258,6 +314,17 @@ def main() -> None:
         dump_csv(pre, out_dir / "edges_train_only.csv")
         _audit_edges(pre, dataset, fold, "E_pre")
         _audit_edges(sim, dataset, fold, "E_sim")
+        leakage_rows.append(
+            compute_leakage_row(
+                dataset=dataset,
+                fold=fold,
+                splits=splits,
+                pre_df=pre,
+                sim_df=sim,
+                q_train=q_train,
+                train_ratio=train_ratio,
+            )
+        )
         stats_rows.append({
             "dataset": dataset,
             "fold": fold,
@@ -266,7 +333,10 @@ def main() -> None:
             "n_similarity_edges": len(sim),
             "n_kcs": train["kc_id"].nunique(),
         })
+        del splits, train, q_train, pre, sim
+        gc.collect()
     _merge_stats_rows(Path("results/tables/graph_stats.csv"), stats_rows, dataset)
+    merge_leakage_metrics_csv(leakage_rows, dataset)
     logger.info("Graph build report written")
 
 

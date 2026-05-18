@@ -182,6 +182,24 @@ def _resolve_run_config(config: Path | None, edges: Path | None, seed: int) -> t
     )
 
 
+def _plot_ddr_figure(dataset: str, summary: pd.DataFrame, fig_path: Path) -> None:
+    """Line plot of mean DDR vs perturbation strength (paper-facing PDF)."""
+    fs_title, fs_axis, fs_tick, fs_legend = 18, 15, 13, 13
+    fig, ax = plt.subplots(figsize=(7.5, 5))
+    if not summary.empty:
+        for aug, part in summary.groupby("augmentation"):
+            part = part.sort_values("p")
+            ax.plot(part["p"], part["ddr_mean"], marker="o", label=aug)
+        ax.set_xlabel("$p$", fontsize=fs_axis)
+        ax.set_ylabel("Mean DDR", fontsize=fs_axis)
+        ax.set_title(f"DDR sweep: {dataset}", fontsize=fs_title)
+        ax.tick_params(axis="both", labelsize=fs_tick)
+        ax.legend(fontsize=fs_legend)
+    fig.tight_layout()
+    fig.savefig(fig_path)
+    plt.close(fig)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run DAG disruption probes")
     parser.add_argument("--config", type=Path, required=False)
@@ -232,17 +250,7 @@ def main() -> None:
     dump_csv(combined_summary.sort_values(["dataset", "augmentation", "p"]), combined_summary_table)
     fig_path = Path("results/figures") / f"fig_ddr_{dataset}.pdf"
     fig_path.parent.mkdir(parents=True, exist_ok=True)
-    if not summary.empty:
-        for aug, part in summary.groupby("augmentation"):
-            part = part.sort_values("p")
-            plt.plot(part["p"], part["ddr_mean"], marker="o", label=aug)
-        plt.xlabel("p")
-        plt.ylabel("Mean DDR")
-        plt.title(f"DDR sweep: {dataset}")
-        plt.legend()
-    plt.tight_layout()
-    plt.savefig(fig_path)
-    plt.close()
+    _plot_ddr_figure(dataset, summary, fig_path)
 
 
 if __name__ == "__main__":

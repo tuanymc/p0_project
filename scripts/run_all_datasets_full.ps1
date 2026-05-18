@@ -101,9 +101,15 @@ foreach ($Dataset in $Datasets) {
     }
     Invoke-P0Step @("-m", "src.split_checker", "--config", $Cfg)
     Invoke-P0Step @("-m", "src.graph_builder", "--config", $Cfg)
+    Invoke-P0Step @("-m", "src.export_full_log_graph", "--config", $Cfg)
     Invoke-P0Step @("-m", "src.dag_audit", "--config", $Cfg)
     Invoke-P0Step @("-m", "src.dag_disruption", "--config", $Cfg)
-    Invoke-P0Step @("-m", "src.baseline_runner", "--config", $Cfg)
+    $baselineArgs = @("-m", "src.baseline_runner", "--config", $Cfg)
+    if ($Cfg -match "junyi\.yaml") {
+        $baselineArgs += "--skip-cold-start"
+        Write-Host "    Junyi baseline uses --skip-cold-start (cold-start strata skipped to reduce RAM)."
+    }
+    Invoke-P0Step -Arguments $baselineArgs
     Invoke-P0Step @("-m", "src.cold_start_report", "--config", $Cfg)
 }
 

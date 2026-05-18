@@ -16,10 +16,14 @@
 - `results/tables/dataset_stats.csv`
 - `results/tables/dataset_stats.tex`
 - `results/tables/ddr_summary.tex`
+- `results/tables/graph_ablation.tex`
+- `results/tables/graph_ablation_summary.csv`
 - `results/tables/graph_stats.csv`
 - `results/tables/junyi_dag_disruption.csv`
 - `results/tables/junyi_dag_disruption_summary.csv`
 - `results/tables/leakage_audit.tex`
+- `results/tables/leakage_metrics.csv`
+- `results/tables/leakage_metrics.tex`
 - `results/tables/xes3g5m_dag_disruption.csv`
 - `results/tables/xes3g5m_dag_disruption_summary.csv`
 
